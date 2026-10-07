@@ -1,6 +1,6 @@
 # CipherLock – Phase 1 Architecture
 
-> **Status:** Phase 1 Foundation  
+> **Status:** Phase 1 Foundation
 > **Last updated:** 2026-10
 
 This document describes the structural and design decisions made during Phase 1.
