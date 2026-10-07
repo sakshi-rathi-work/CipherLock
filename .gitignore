@@ -1,0 +1,31 @@
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+instance/
+
+# Python environments, bytecode, tests, and logs
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Local databases and runtime data
+database/*.db
+storage/*
+!storage/.gitkeep
+certificates/*
+!certificates/.gitkeep
+keys/*
+!keys/.gitkeep
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
