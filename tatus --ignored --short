@@ -1,0 +1,19 @@
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/__init__.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'routes/auth.py', LF will be replaced by CRLF the next time Git touches it
+ .env.example           |   1 [32m+[m
+ .gitignore             |   7 [32m++[m
+ CONTRIBUTING.md        |   5 [32m+[m[31m-[m
+ CipherLock.md          |   5 [32m++[m
+ IMPLEMENTATION_PLAN.md | 177 [32m++++++++++++++++++++++++++++++++[m[31m---------[m
+ README.md              | 188 [32m+++++++++++++++++++++++[m[31m--------------------[m
+ app.py                 |  61 [32m+++++++++++++[m[31m-[m
+ config.py              |   1 [32m+[m
+ database/db.py         |   6 [32m+[m[31m-[m
+ docs/ARCHITECTURE.md   |  34 [32m++++[m[31m----[m
+ pytest.ini             |   2 [32m+[m
+ routes/__init__.py     |  53 [32m++++++++++++[m[31m-[m
+ routes/auth.py         | 211 [32m++++++++++++++++++++++++++++++++++++++++++++++++[m[31m-[m
+ templates/base.html    |   2 [32m+[m[31m-[m
+ tests/test_app.py      |   5 [32m+[m[31m-[m
+ 15 files changed, 606 insertions(+), 152 deletions(-)

@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #0c1d31;
+  --navy-2: #132b45;
+  --ink: #17283c;
+  --muted: #738194;
+  --lime: #c4f16e;
+  --lime-hover: #d2fa87;
+  --paper: #f5f7f8;
+  --line: #dce3e9;
+}
+
+/* Accessible focus visible ring */
+*:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* Custom Eyebrow styling from Phase 1 */
+.eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 1.25px;
+  text-transform: uppercase;
+}
+
+/* Lime button matching Phase 1 */
+.btn-lime {
+  background-color: var(--lime);
+  color: #132237;
+  font-weight: 650;
+  transition: all 0.2s ease;
+}
+
+.btn-lime:hover:not(:disabled) {
+  background-color: var(--lime-hover);
+  box-shadow: 0 0 15px rgba(196, 241, 110, 0.4);
+}
+
+.btn-lime:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Form input styling */
+.form-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background-color: #ffffff;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.925rem;
+  color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-input:hover {
+  border-color: #b0c0ce;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #132b45;
+  box-shadow: 0 0 0 3px rgba(19, 43, 69, 0.15);
+}
+
+.form-input.is-invalid {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.form-input.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}

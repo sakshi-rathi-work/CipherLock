@@ -1,29 +1,25 @@
-# CipherLock – Phase 1 Architecture
+# CipherLock – System Architecture
 
-> **Status:** Phase 1 Foundation
-> **Last updated:** 2026-10
+> **Status:** Phase 2 Complete (Authentication & Database Models)  
+> **Last updated:** 2026-10-08
 
-This document describes the structural and design decisions made during Phase 1.
-It is a living reference: later phases will extend it to cover authentication,
-cryptographic workflows, certificate issuance, and the full file-sharing pipeline.
-
----
-
-## Overview
-
-CipherLock is a Flask web application that will eventually allow users to
-encrypt, store, and securely share files using hybrid cryptography, RSA
-key-pairs, and X.509 certificates.  Phase 1 establishes the application
-skeleton only: no encryption or authentication is active.
+This document describes the structural and design decisions of CipherLock.
+Phase 1 established the application foundation and SQLite schema.
+Phase 2 introduces authentication, scrypt password hashing, brute-force lockout,
+session management, and the React 18 + Vite + Tailwind v3 SPA (`frontend/`).
 
 ```
-Browser ──HTTP──► Flask app (app.py)
+Browser ──HTTP──► Flask app (app.py) ◄── Vite Proxy (/api) ◄── React SPA (frontend/)
                      │
                      ├── config.py          (environment-backed settings)
-                     ├── routes/            (placeholder blueprints)
-                     ├── database/db.py     (SQLite helpers)
+                     ├── routes/auth.py     (/api/auth: register, login, logout, me, activity)
+                     ├── models/user.py     (scrypt hashing, user CRUD, password policy)
+                     ├── models/activity.py (security audit log)
+                     ├── models/lockout.py  (in-memory brute-force lockout: 5 fails / 300s)
+                     ├── models/provisioning.py (crypto provisioning placeholder hook)
+                     ├── database/db.py     (SQLite helpers with PRAGMA foreign_keys)
                      ├── database/schema.sql
-                     └── templates/         (Jinja2 HTML)
+                     └── templates/         (Phase 1 server-rendered Jinja2 landing)
 ```
 
 ---

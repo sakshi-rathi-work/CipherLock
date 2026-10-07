@@ -16,7 +16,7 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
       <div class="collapse navbar-collapse" id="mainNav"><div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
         <a class="nav-link" href="{{ url_for('index') }}#security">Security goals</a>
-        {% if session.get('user_id') %}<a class="nav-link" href="#">Dashboard</a><span class="nav-link text-light small">{{ session.get('user_name', 'Account') }}</span>{% else %}<a class="nav-link" href="#project-status">Project status</a>{% endif %}
+        {% if session.get('user_id') %}<a class="nav-link" href="{{ config.FRONTEND_URL }}/dashboard">Dashboard</a><span class="nav-link text-light small">{{ session.get('user_name', 'Account') }}</span>{% else %}<a class="nav-link" href="{{ config.FRONTEND_URL }}/login">Sign in</a><a class="btn btn-lime btn-sm ms-lg-2" href="{{ config.FRONTEND_URL }}/register">Register</a>{% endif %}
       </div></div>
     </div>
   </nav>

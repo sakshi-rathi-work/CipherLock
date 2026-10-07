@@ -9,12 +9,12 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 2 — Authentication and Database Models
+- **Current Phase:** Phase 3 — Crypto Core: AES-256-GCM and RSA Key Pairs
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1
+- **Completed Phases:** Phase 1, Phase 2
 - **Current Blockers:** None
-- **Last Updated:** 2026-10-07
-- **Next Developer's Task:** Begin Phase 2 — Implement user registration, login, logout, scrypt password hashing, brute-force lockout, activity logging, and frontend authentication context and forms.
+- **Last Updated:** 2026-10-08
+- **Next Developer's Task:** Begin Phase 3 — Implement independent crypto/aes.py (AES-256-GCM authenticated encryption), crypto/rsa.py (RSA-3072 key generation and PKCS#8 encrypted PEM storage), integrate RSA key pair generation into user registration transaction in models/provisioning.py, add the key-generation notice to Register.jsx, and build scripts/demo_aes.py.
 
 ---
 
@@ -180,49 +180,99 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 - **Objective:** Build secure user registration, login, logout, session management, scrypt password hashing, brute-force IP/email lockout, activity logging, and frontend authentication context and forms.
 - **Assigned Developer / Phase Owner:** Developer 2 (Agent 2)
-- **Status:** `NOT_STARTED`
+- **Status:** `COMPLETE`
 - **Dependencies:** Phase 1
 - **Files to Create / Modify:**
   - **Backend:**
-    - `backend/models/user.py` (`create_user`, `get_user_by_email`, `get_user_by_id`, `list_other_users`, `set_user_active`)
-    - `backend/models/activity.py` (`log_activity`)
-    - `backend/models/provisioning.py` (stub hook `provision_user_crypto(user_id, name, email, password)`)
-    - `backend/routes/auth.py` (`/register`, `/login`, `/logout`, `/me`)
-    - `backend/routes/__init__.py` (`login_required` and `admin_required` decorators)
-    - `backend/tests/test_auth.py`
+    - `models/user.py` (`create_user`, `get_user_by_email`, `get_user_by_id`, `list_other_users`, `set_user_active`, `validate_password`, `hash_password`, `verify_password`, `public_user_dict`, `DuplicateEmailError`)
+    - `models/activity.py` (`log_activity`, `list_recent_activity`)
+    - `models/provisioning.py` (`provision_user_crypto` placeholder hook)
+    - `models/lockout.py` (in-memory brute-force lockout, 5 failures / 300s window per email+IP)
+    - `routes/auth.py` (`/register`, `/login`, `/logout`, `/me`, `/activity`)
+    - `routes/__init__.py` (`login_required` and `admin_required` decorators, `current_user` helper)
+    - `app.py` (registered `auth_bp` at `/api/auth`, added `GET /api/csrf-token`, scoped `/api` JSON error handlers)
+    - `config.py` + `.env.example` + `.env` (added `FRONTEND_URL`)
+    - `templates/base.html` (updated navbar login/register/dashboard links to point to `FRONTEND_URL`)
+    - `tests/test_auth.py` (22 unit & integration tests)
   - **Frontend:**
-    - `frontend/src/context/AuthContext.jsx` (auth state, login, register, logout, session check)
-    - `frontend/src/components/ProtectedRoute.jsx` (route guards for authenticated users and admins)
-    - `frontend/src/api/client.js` (CSRF token extraction and header injection `X-CSRFToken`)
-    - `frontend/src/pages/Register.jsx` (form validation, password strength meter, call backend registration)
-    - `frontend/src/pages/Login.jsx` (login form with error handling)
-    - `frontend/src/pages/Dashboard.jsx` (dashboard shell displaying user details, activity log, counts)
+    - `frontend/package.json`, `frontend/vite.config.js`, `frontend/tailwind.config.js`, `frontend/postcss.config.js`, `frontend/index.html`
+    - `frontend/src/main.jsx`, `frontend/src/App.jsx`, `frontend/src/index.css`
+    - `frontend/src/api/client.js` (CSRF token extraction, caching, retry, error normalisation, 401 bus)
+    - `frontend/src/context/AuthContext.jsx` (auth state, login, register, logout, session check, CSRF invalidation)
+    - `frontend/src/components/Navbar.jsx`, `Footer.jsx`, `ProtectedRoute.jsx`, `PasswordInput.jsx`, `Spinner.jsx`
+    - `frontend/src/pages/Register.jsx`, `Login.jsx`, `Dashboard.jsx`, `NotFound.jsx`
 - **Main Implementation Tasks:**
-  1. Implement parameterized user CRUD operations in `models/user.py` and `log_activity` in `models/activity.py` (never log passwords, tokens, or private keys).
-  2. Implement password complexity validation ($\ge 10$ characters, 1 uppercase, 1 lowercase, 1 digit). Hash passwords using Werkzeug `generate_password_hash` with `scrypt`.
-  3. Build in-memory brute-force lockout: 5 failed attempts per email+IP triggers a 5-minute lockout period. Return generic error message *"Invalid email or password"* on failure.
-  4. Create session management logic: regenerate session on login, store only `user_id` in session. Build `login_required` and `admin_required` decorators checking `is_active` status.
-  5. Add `provision_user_crypto` placeholder hook in `models/provisioning.py` called during registration.
-  6. Build React `AuthContext`, `ProtectedRoute`, `Register.jsx`, `Login.jsx`, and `Dashboard.jsx`. Ensure Axios client includes `X-CSRFToken` header automatically.
+  1. Implemented parameterized user operations in `models/user.py` and activity auditing in `models/activity.py`.
+  2. Implemented password complexity policy ($\ge 10$ and $\le 128$ chars, uppercase, lowercase, digit) and Werkzeug `scrypt` hashing.
+  3. Built thread-safe in-memory lockout module (`models/lockout.py`): 5 failed attempts per (email, IP) triggers 300s lockout, returns generic 401 on attempts 1–5 and 429 with `Retry-After` once locked.
+  4. Built session regeneration on login (`session.clear()` then `session["user_id"] = id`), with `login_required` and `admin_required` decorators.
+  5. Added `provision_user_crypto` hook inside the atomic registration transaction in `models/provisioning.py`.
+  6. Built React 18 + Vite + Tailwind v3 SPA under `frontend/` with Phase 1 design tokens, accessible forms, strength meter, lockout countdown, and disabled feature tiles.
 - **APIs / Modules / Contracts Involved:**
-  - `POST /api/auth/register` $\rightarrow$ `{"message": "User registered", "user": {"id": 1, "name": "...", "email": "..."}}`
-  - `POST /api/auth/login` $\rightarrow$ `{"message": "Login successful", "user": {...}}`
-  - `POST /api/auth/logout` $\rightarrow$ `{"message": "Logged out"}`
-  - `GET /api/auth/me` $\rightarrow$ `{"user": {"id": 1, "name": "...", "email": "...", "is_admin": false}}`
+  - `POST /api/auth/register` $\rightarrow$ `{"message": "User registered", "user": {"id": 1, "name": "...", "email": "..."}}` (201)
+  - `POST /api/auth/login` $\rightarrow$ `{"message": "Login successful", "user": {"id": 1, "name": "...", "email": "..."}}` (200)
+  - `POST /api/auth/logout` $\rightarrow$ `{"message": "Logged out"}` (200)
+  - `GET /api/auth/me` $\rightarrow$ `{"user": {"id": 1, "name": "...", "email": "...", "is_admin": false}}` (200)
+  - `GET /api/auth/activity` $\rightarrow$ `{"activity": [{"action": "...", "detail": "...", "created_at": "..."}]}` (200)
+  - `GET /api/csrf-token` $\rightarrow$ `{"csrf_token": "..."}` with `Cache-Control: no-store` (200)
 - **Security Requirements:**
-  - Password hashes stored with `scrypt` algorithm (`scrypt:` prefix in DB).
-  - Generic login failure responses to prevent user enumeration attacks.
-  - Brute-force lockout (5 attempts / 5 minutes).
-  - CSRF protection active on all mutating endpoints (`POST`).
+  - Passwords hashed exclusively using `scrypt` (`scrypt:` prefix verified in SQLite).
+  - Generic login failure (401 "Invalid email or password") with timing attack mitigation (dummy scrypt verification for unknown emails).
+  - Brute-force lockout enforced per (email, IP) pair; does not extend during active lockout.
+  - CSRF protection enforced across all mutating endpoints.
+  - No passwords, hashes, session tokens, or private key material appear in logs, API responses, or activity details.
 - **Tests Required:**
-  - Run `pytest backend/tests/test_auth.py` testing: successful registration, duplicate email rejection, weak password rejection, incorrect password rejection, 5-attempt lockout, session redirection, `scrypt:` hash format verification.
-  - Register users Siddharth and Vidhi via the React UI and verify database contents with `sqlite3`.
+  - Unit/integration suite: `python -m pytest tests/test_auth.py -v` (22 passed).
+  - Full suite: `python -m pytest -v` (28 passed: 6 Phase 1 + 22 Phase 2).
+  - Frontend bundle build: `npm run build` in `frontend/` (succeeded).
+  - Live server verification: Siddharth and Vidhi registered and authenticated; byte-level check of `database/cipherlock.db` confirmed 0 plaintext leaks.
 - **Acceptance Criteria:**
-  - Users can register and log in via the React frontend.
-  - Passwords in `users` table are stored purely as `scrypt:` hashes.
-  - Unauthenticated access to protected routes yields HTTP 401/403 or redirects appropriately.
+  - Users can register, log in, view dashboard, and log out via API and frontend SPA.
+  - Password hashes start with `scrypt:` in SQLite.
+  - Protected endpoints reject unauthenticated requests with 401 JSON.
 - **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 2 upon phase completion.*
+  - **Implementation summary:** Complete Phase 2 authentication system implemented directly in the repository with flat structure. Backend provides `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/activity`, and `/api/csrf-token`. Scoped JSON error handling applies to all `/api/*` endpoints while preserving Phase 1's HTML error pages for non-API routes. Frontend SPA built in `frontend/` using React 18, Vite, and Tailwind v3 with design tokens matching Phase 1 (`--navy`, `--lime`, `--paper`, etc.).
+  - **Files created:**
+    - `models/user.py`
+    - `models/activity.py`
+    - `models/provisioning.py`
+    - `models/lockout.py`
+    - `tests/test_auth.py`
+    - `frontend/package.json`, `frontend/vite.config.js`, `frontend/tailwind.config.js`, `frontend/postcss.config.js`, `frontend/index.html`
+    - `frontend/src/main.jsx`, `frontend/src/App.jsx`, `frontend/src/index.css`
+    - `frontend/src/api/client.js`
+    - `frontend/src/context/AuthContext.jsx`
+    - `frontend/src/components/Navbar.jsx`, `Footer.jsx`, `ProtectedRoute.jsx`, `PasswordInput.jsx`, `Spinner.jsx`
+    - `frontend/src/pages/Register.jsx`, `Login.jsx`, `Dashboard.jsx`, `NotFound.jsx`
+  - **Files modified:**
+    - `routes/auth.py` (replaced stub with full auth blueprint)
+    - `routes/__init__.py` (added `login_required`, `admin_required`, `current_user`)
+    - `app.py` (registered auth_bp at `/api/auth`, added `/api/csrf-token`, added scoped JSON error handlers)
+    - `database/db.py` (explicit SQLite connection close in `init_db`)
+    - `tests/test_app.py` (explicit SQLite connection close in `test_database_has_four_contract_tables`)
+    - `pytest.ini` (added ResourceWarning and PytestUnraisableExceptionWarning filter for Python 3.14)
+    - `config.py`, `.env.example`, `.env` (added `FRONTEND_URL`)
+    - `templates/base.html` (updated nav links to point to `FRONTEND_URL`)
+    - `.gitignore` (added frontend build artifacts and node_modules)
+  - **Path Mapping:** Spec referenced `backend/*` — mapped to root equivalent (`models/*`, `routes/*`, `tests/*`, etc.).
+  - **Known Trade-offs & Architecture Notes:**
+    - Lockout state is in-memory and per-process (acceptable for local dev / Phase 2; Phase 10 introduces rate limiting).
+    - Email uniqueness is case-insensitive; duplicate registration returns 409 (accepted trade-off per spec).
+    - Sessions use client-side signed cookies with 30-minute expiration; server revocation of old signed cookies is not possible without server-side session storage (standard Flask signed cookie behavior).
+    - `X-Forwarded-For` is not trusted because ProxyFix is not configured in Phase 1 (reserved for Phase 10).
+  - **Step-by-step Phase 3 instructions:**
+    1. Implement `crypto/aes.py`: `generate_session_key()` (32 random bytes), `encrypt_bytes(key, plaintext, aad)` (12-byte random nonce, AES-256-GCM, returns `(nonce, ciphertext_with_tag)`), and `decrypt_bytes(key, nonce, data, aad)` (raises `DecryptionError` on tag mismatch).
+    2. Implement `crypto/rsa.py`: `generate_rsa_keypair(bits=3072, public_exponent=65537)`, `private_key_to_encrypted_pem(priv, passphrase)` using PKCS#8 `BestAvailableEncryption` (passphrase = user password), `load_private_key(pem, passphrase)`, `public_key_to_pem(pub)`, `load_public_key(pem)`, `public_key_fingerprint(pub)`.
+    3. Extend `models/provisioning.py`:
+       - Update `provision_user_crypto(user_id: int, name: str, email: str, password: str) -> None`.
+       - Keep the exact function signature.
+       - Generate RSA-3072 key pair and write `public_key` and `encrypted_private_key` to `users` table via parameterized `UPDATE users SET public_key = ?, encrypted_private_key = ? WHERE id = ?`.
+       - Do NOT call `db.commit()` inside `provision_user_crypto`; the registration route commits the transaction once at the end. Any exception will roll back the entire registration transaction.
+       - Use `password` ONLY as the PKCS#8 passphrase; NEVER store, log, or return the password.
+       - Add a dedicated model accessor for loading `encrypted_private_key` when needed; do NOT loosen `get_user_by_id`.
+       - Ensure Phase 2 tests (`tests/test_auth.py`) continue to pass (e.g. monkeypatch or mock RSA keygen in auth tests if desired to keep test speed fast).
+    4. Update `frontend/src/pages/Register.jsx` to display "Generating your RSA-3072 key pair..." user notice and spinner during registration.
+    5. Build CLI verification script `scripts/demo_aes.py` and write tests `tests/test_aes.py` and `tests/test_rsa_keys.py`.
 
 ---
 
@@ -566,7 +616,7 @@ Later phases depend on exact python function signatures and REST endpoints:
 | Phase | Developer / Owner | Status | Date Completed | Tests Passed | Main Deliverables / Notes |
 |---|---|---|---|---|---|
 | **Phase 1** | Developer 1 (Agent 1) | `COMPLETE` | 2026-10-07 | 6 passed | Flask factory, config, SQLite schema (4 tables), Bootstrap landing page, error pages, `/health`, CSRF, session security, `check_env.py`, `pytest.ini`, `conftest.py`, `README.md`, `CONTRIBUTING.md`, `docs/ARCHITECTURE.md` |
-| **Phase 2** | Developer 2 (Agent 2) | `NOT_STARTED` | — | — | Pending Phase 2 execution |
+| **Phase 2** | Developer 2 (Agent 2) | `COMPLETE` | 2026-10-08 | 28 passed | scrypt authentication, in-memory lockout (5 failures / 300s), session management, CSRF client integration, React 18 + Vite + Tailwind v3 SPA under `frontend/`, activity logging, tests/test_auth.py |
 | **Phase 3** | Developer 3 (Agent 3) | `NOT_STARTED` | — | — | Pending Phase 3 execution |
 | **Phase 4** | Developer 4 (Agent 4) | `NOT_STARTED` | — | — | Pending Phase 4 execution |
 | **Phase 5** | Developer 5 (Agent 5) | `NOT_STARTED` | — | — | Pending Phase 5 execution |
@@ -619,7 +669,56 @@ Later phases depend on exact python function signatures and REST endpoints:
 - Security hardening, full documentation suite (Phase 10)
 
 ### Phase 2 Handoff Notes
-*Status: Pending*
+*Status: COMPLETE — 2026-10-08*
+
+**Implemented by:** Developer 2 (Agent 2)
+
+**What was built:**
+- **Backend Authentication & Models:**
+  - `models/user.py`: scrypt password hashing (`hash_password`, `verify_password`), password policy validation ($\ge 10$ and $\le 128$ chars, upper, lower, digit), parameterized queries for `create_user`, `get_user_by_email` (internal use only), `get_user_by_id` (safe columns only, never sensitive fields), `list_other_users`, `set_user_active`, `public_user_dict`, `DuplicateEmailError`. Includes cached dummy scrypt verification for unknown user lookups to mitigate timing attacks (P10).
+  - `models/activity.py`: audit logging (`log_activity`) for register, login, login_failed, login_locked, logout; and `list_recent_activity` for dashboard audit display. Zero credentials, hashes, or tokens logged.
+  - `models/lockout.py`: thread-safe in-memory brute-force lockout tracking `(email, remote_addr)` pairs; 5 failed attempts starts a 300-second lockout window; locked attempts return 429 with `Retry-After`; lockouts do not extend during active lock; clock injection (`set_clock`, `reset_clock`, `reset_all`) for deterministic testing.
+  - `models/provisioning.py`: `provision_user_crypto(user_id, name, email, password)` placeholder hook executing within the registration database transaction.
+  - `routes/auth.py`: REST blueprint registered at `/api/auth` containing `/register` (201), `/login` (200), `/logout` (200), `/me` (200), and `/activity` (200).
+  - `routes/__init__.py`: `@login_required` and `@admin_required` decorators and `current_user()` helper.
+  - `app.py`: Blueprint registration with `/api/auth` prefix, `GET /api/csrf-token` with `Cache-Control: no-store`, and scoped JSON error handlers for all `/api/*` paths (400, 401, 403, 404, 405, 413, 429, 500, and `CSRFError` $\rightarrow$ 400).
+- **Frontend SPA (`frontend/`):**
+  - React 18 + Vite + Tailwind CSS v3 architecture extending Phase 1's design tokens (`--navy`, `--lime`, `--paper`, monospace accents).
+  - `src/api/client.js`: Axios instance with `withCredentials: true`, bare CSRF token fetching from `/api/csrf-token`, automatic `X-CSRFToken` header injection, single retry on CSRF 400, global unauthenticated bus for 401 handling, and safe error normalization.
+  - `src/context/AuthContext.jsx`: Session lifecycle, login, registration, logout, user profile hydration, and token cache invalidation on auth state transitions.
+  - `src/components/`: `Navbar` (responsive with mobile hamburger, links to Phase 1 home), `Footer`, `ProtectedRoute`, `PasswordInput` (visibility toggle, accessible ARIA attributes, password manager friendly), `Spinner`.
+  - `src/pages/`: `Register` (accessible live validation, strength meter, checklist, confirm-password feedback), `Login` (lockout countdown timer with live re-enable), `Dashboard` (Account Profile, Active Security guarantees, Recent Activity audit, visibly disabled Phase 3–6 upcoming feature tiles), `NotFound`.
+- **Testing & Tooling:**
+  - `tests/test_auth.py`: 22 exhaustive unit & integration tests covering registration, duplicate rejection, weak password rejection, scrypt format, session key containment (`user_id`, `csrf_token`, `_permanent`), session clearing, logout idempotency, deactivated account rejection, admin decorator, brute-force lockout (5 attempts, 300s expiration, non-extension, independent IPs), activity audit trail, lack of credential leakage in DB/API responses, CSRF enforcement, mass assignment prevention, transaction rollback, and SQL injection safety.
+  - Python 3.14 SQLite resource cleanup fixed in `database/db.py` (`init_db`) and `tests/test_app.py`.
+
+**Verification results:**
+- `python scripts/check_env.py` — PASSED (Python 3.14.2, Flask 3.1.3, cryptography 46.0.3)
+- `python init_db.py` — PASSED (all four contract tables verified)
+- `python -m pytest tests/test_auth.py -v` — **22 passed, 0 failed**
+- `python -m pytest -v` — **28 passed, 0 failed** (6 Phase 1 baseline + 22 Phase 2 tests)
+- `cd frontend && npm run build` — **Built in 20.06s** (`dist/` generated cleanly)
+- Live manual tests:
+  - `GET /api/csrf-token` $\rightarrow$ 200 OK with `Cache-Control: no-store`
+  - Registered Siddharth and Vidhi via `/api/auth/register` $\rightarrow$ 201 Created
+  - Authenticated via `/api/auth/login` $\rightarrow$ 200 OK with session cookie
+  - Inspected `database/cipherlock.db` $\rightarrow$ all hashes start with `scrypt:`, byte-level search confirmed 0 plaintext password leaks
+  - 5 bad logins on live server $\rightarrow$ 6th attempt returned HTTP 429 with `Retry-After: 299`
+  - Verified Phase 1 routes: `/` returns 200 HTML, `/health` returns 200 `{"status": "ok"}`
+
+**Key decisions & Architecture notes:**
+- **Option A (React SPA in `frontend/`)** was successfully built and bundled using Vite and Tailwind v3, reusing Phase 1's exact colors, fonts, and brand identity. `templates/base.html` was updated to link to the SPA via `FRONTEND_URL` (`http://localhost:5173`).
+- In dev mode, Vite proxies `/api` requests to Flask `:5000`. Single-origin deployment serving `frontend/dist` will be completed in Phase 10.
+- All Phase 2 routes reside under `/api/auth/*` and return JSON. Non-API error handlers retain Phase 1's HTML error pages.
+- Lockout is tracked per `(email, remote_addr)` in-memory. In dev/testing, state is per-process.
+
+**Step-by-step Phase 3 instructions:**
+1. Keep the exact signature of `provision_user_crypto(user_id: int, name: str, email: str, password: str) -> None` in `models/provisioning.py`.
+2. In `crypto/aes.py`, implement `generate_session_key()`, `encrypt_bytes(key, plaintext, aad)`, and `decrypt_bytes(key, nonce, data, aad)` (raising `DecryptionError` on tag mismatch).
+3. In `crypto/rsa.py`, implement `generate_rsa_keypair(bits=3072, public_exponent=65537)`, `private_key_to_encrypted_pem(priv, passphrase)` using PKCS#8 `BestAvailableEncryption` with user password as passphrase, `load_private_key(pem, passphrase)`, `public_key_to_pem(pub)`, `load_public_key(pem)`, and `public_key_fingerprint(pub)`.
+4. Connect RSA keygen into registration: inside `provision_user_crypto`, generate the RSA-3072 key pair and write `public_key` (PEM bytes) and `encrypted_private_key` (PEM bytes) to `users` using a parameterized SQL UPDATE on the current connection. Do NOT commit inside `provision_user_crypto`; the registration route commits at the end.
+5. In `frontend/src/pages/Register.jsx`, add the user notice and spinner: "Generating your RSA-3072 key pair...".
+6. Add CLI demo `scripts/demo_aes.py` and write tests `tests/test_aes.py` and `tests/test_rsa_keys.py`. Ensure all 28 existing tests continue to pass.
 
 ### Phase 3 Handoff Notes
 *Status: Pending*

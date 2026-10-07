@@ -47,8 +47,11 @@ def test_health_returns_json(client):
 
 
 def test_database_has_four_contract_tables(app):
-    with sqlite3.connect(app.config["DATABASE_PATH"]) as connection:
+    connection = sqlite3.connect(app.config["DATABASE_PATH"])
+    try:
         names = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        connection.close()
     assert {"users", "files", "certificates", "activity_log"} <= names
 
 

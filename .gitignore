@@ -29,3 +29,10 @@ keys/*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Frontend and build artifacts
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

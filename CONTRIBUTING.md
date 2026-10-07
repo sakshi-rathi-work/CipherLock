@@ -86,14 +86,15 @@ database/
   db.py             Connection lifecycle helpers
 
 routes/             One Blueprint per area (auth, files, users, admin)
-models/             Reserved – future SQLite row helpers
+models/             Database models (user.py, activity.py, lockout.py, provisioning.py)
 crypto/             Reserved – future AES-GCM / RSA / X.509 modules
+frontend/           React 18 + Vite + Tailwind v3 SPA (client app)
 templates/          Jinja2 HTML (base layout, pages, error pages)
 static/css/         Core styles (style.css) + animation layer (landing.css)
 static/js/          Landing interactions (main.js)
 static/images/      Reserved – future UI images
 scripts/            Developer utilities (check_env.py)
-tests/              pytest test modules
+tests/              pytest test modules (test_app.py, test_auth.py)
 docs/               Architecture and design documentation
 ```
 

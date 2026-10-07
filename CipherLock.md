@@ -4,6 +4,11 @@
 
 > This is the single source of truth for the project. It condenses the 10-phase build prompts and adapts them to the final target: a **proper React + Tailwind CSS frontend** talking to a **fully working Flask JSON-API backend**. All cryptographic design decisions (D1–D8) are unchanged from the original prompts.
 
+> **Current repository state / deviations note (Phase 2):**
+> 1. **Repository Layout:** The backend code lives directly at the repository root (`app.py`, `models/`, `routes/`, `database/`, `tests/`) rather than nested in a `backend/` directory. All paths map 1-to-1 (`backend/models/user.py` $\rightarrow$ `models/user.py`).
+> 2. **Frontend Architecture:** The authenticated SPA lives in `frontend/` (React 18 + Vite + Tailwind v3). The public home page (`/`) is currently served by Flask via Phase 1's Jinja2 template and links seamlessly to the SPA via `FRONTEND_URL` (`/login`, `/register`, `/dashboard`). Vite proxies `/api` to Flask in dev; Phase 10 will serve `frontend/dist` directly from Flask for production single-origin hosting.
+> 3. **Health Check:** Root health endpoint is `GET /health` $\rightarrow$ `{"status": "ok"}`.
+
 ---
 
 ## 1. Project Overview

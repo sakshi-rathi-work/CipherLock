@@ -32,9 +32,13 @@ def init_db(database_path: str | Path | None = None) -> None:
     path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     schema_path = Path(__file__).with_name("schema.sql")
-    with sqlite3.connect(path) as connection:
+    connection = sqlite3.connect(path)
+    try:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript(schema_path.read_text(encoding="utf-8"))
+        connection.commit()
+    finally:
+        connection.close()
 
 
 if __name__ == "__main__":

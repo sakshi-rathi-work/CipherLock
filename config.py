@@ -49,3 +49,4 @@ class Config:
     CIPHERLOCK_CA_PASSPHRASE = os.getenv("CIPHERLOCK_CA_PASSPHRASE", "")
     DEMO_MODE = os.getenv("DEMO_MODE", "0").strip() == "1"
     WTF_CSRF_TIME_LIMIT = 3600
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
