@@ -1,0 +1,68 @@
+/*
+ * CipherLock – landing.css
+ *
+ * Entrance-animation helpers driven by main.js via IntersectionObserver.
+ * Kept separate from style.css so the animation layer can be maintained,
+ * extended, or stripped independently of the core design tokens.
+ *
+ * Rules rely only on CSS custom properties already declared in style.css;
+ * do not import values here, just reference --navy, --lime, etc.
+ */
+
+/* ── Navbar elevation shadow (toggled by main.js) ──────────────────── */
+.site-nav {
+  transition: box-shadow 0.25s ease;
+}
+.site-nav--elevated {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Entrance animation: initial state ─────────────────────────────── */
+.will-animate {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+/* ── Entrance animation: revealed state ────────────────────────────── */
+.will-animate.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger feature cards so they cascade in rather than all appearing at once */
+.feature-card:nth-child(2).will-animate { transition-delay: 0.07s; }
+.feature-card:nth-child(3).will-animate { transition-delay: 0.14s; }
+.feature-card:nth-child(4).will-animate { transition-delay: 0.21s; }
+.feature-card:nth-child(5).will-animate { transition-delay: 0.28s; }
+.feature-card:nth-child(6).will-animate { transition-delay: 0.35s; }
+
+/* ── Skip-to-content link (keyboard accessibility) ─────────────────── */
+#skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: 1rem;
+  background: var(--lime);
+  color: var(--navy);
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  z-index: 9999;
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+#skip-to-content:focus {
+  left: 1rem;
+}
+
+/* ── Reduced-motion: honour the OS accessibility preference ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .will-animate {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .site-nav {
+    transition: none;
+  }
+}
