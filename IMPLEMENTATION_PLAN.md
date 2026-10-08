@@ -9,12 +9,12 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 3 — Crypto Core: AES-256-GCM and RSA Key Pairs
+- **Current Phase:** Phase 4 — Mini CA and X.509 Certificates
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1, Phase 2
-- **Current Blockers:** None
+- **Completed Phases:** Phase 1, Phase 2, Phase 3
+- **Current Blockers:** Local pytest/frontend build verification requires the project dependencies to be installed on the developer machine.
 - **Last Updated:** 2026-10-08
-- **Next Developer's Task:** Begin Phase 3 — Implement independent crypto/aes.py (AES-256-GCM authenticated encryption), crypto/rsa.py (RSA-3072 key generation and PKCS#8 encrypted PEM storage), integrate RSA key pair generation into user registration transaction in models/provisioning.py, add the key-generation notice to Register.jsx, and build scripts/demo_aes.py.
+- **Next Developer's Task:** Finish local Phase 4 verification (`pytest -q`, `npm run build`, CA/OpenSSL checks), commit/push Phase 4 to `main`, then begin Phase 5 (RSA-OAEP key wrapping + RSA-PSS signatures).
 
 ---
 
@@ -322,49 +322,60 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 ### Phase 4 — Mini CA and X.509 Certificates
 
-- **Objective:** Construct the self-signed Root CA (`crypto/ca.py`), X.509 certificate issuance pipeline during user registration, certificate validation engine (`crypto/certificates.py`), Certificate Directory, and Admin CA Management interface.
+- **Objective:** Construct the self-signed Root CA, issue X.509 certificates to registered users, validate the certificate trust chain and revocation state, expose a certificate directory, and provide an administrator CA control panel.
 - **Assigned Developer / Phase Owner:** Developer 4 (Agent 4)
-- **Status:** `NOT_STARTED`
+- **Status:** `IMPLEMENTED — LOCAL VERIFICATION PENDING`
 - **Dependencies:** Phase 1, Phase 2, Phase 3
-- **Files to Create / Modify:**
-  - **Backend:**
-    - `backend/crypto/ca.py` (`init_ca`, `load_ca`, `issue_user_certificate`, `revoke_certificate`)
-    - `backend/crypto/certificates.py` (`load_certificate`, `verify_certificate`, `CertReport`)
-    - `backend/scripts/init_ca.py` (CA initialization script)
-    - `backend/scripts/create_admin.py` (Admin user creation script)
-    - `backend/models/provisioning.py` (update `provision_user_crypto` to issue X.509 cert)
-    - `backend/routes/users.py` (`/directory`, `/<id>/certificate`, `/<id>/certificate/view`)
-    - `backend/routes/admin.py` (`/ca-info`, `/certificates`, `/<serial>/revoke`)
-    - `backend/tests/test_ca_certs.py`
-  - **Frontend:**
-    - `frontend/src/pages/Directory.jsx` (Certificate directory of active users)
-    - `frontend/src/pages/CertificateView.jsx` (Decoded X.509 certificate viewer)
-    - `frontend/src/pages/admin/AdminPanel.jsx` (Root CA stats, certificate table, revoke control)
-- **Main Implementation Tasks:**
-  1. Build `crypto/ca.py`: `init_ca()` generates RSA-4096 self-signed Root CA (`Subject CN=CipherLock Root CA, O=CipherLock, C=IN`, 10-year validity, `BasicConstraints ca=True, path_length=0`, `KeyUsage key_cert_sign, crl_sign`). Key encrypted with `CIPHERLOCK_CA_PASSPHRASE` saved to `keys/ca/ca_key.pem` (mode `0600`); cert saved to `certificates/ca/ca_cert.pem`. Build `issue_user_certificate(name, email, public_key)` creating X.509 v3 cert signed with SHA-256 + PKCS#1 v1.5, 1-year validity, unique random serial number, SAN email, `KeyUsage digital_signature, key_encipherment`.
-  2. Build `crypto/certificates.py`: `verify_certificate(cert_pem, expected_email=None)` returning `CertReport` checking: CA public key signature over TBS bytes, current UTC time within validity window, serial number not revoked in database `certificates` table, Subject email matching expected email, `KeyUsage` flags present.
-  3. Create CLI scripts `scripts/init_ca.py` and `scripts/create_admin.py`.
-  4. Update `models/provisioning.py` so user registration issues a certificate, saves it to `users.certificate`, inserts a record into `certificates` table, and writes a PEM file copy to `certificates/users/<id>.pem`.
-  5. Build API routes and React components for Directory, CertificateView, and AdminPanel.
-- **APIs / Modules / Contracts Involved:**
-  - `crypto/ca.py`: `init_ca()`, `load_ca()`, `issue_user_certificate(name, email, public_key) -> tuple[bytes, int]`, `revoke_certificate(serial)`
-  - `crypto/certificates.py`: `verify_certificate(cert_pem, expected_email=None) -> CertReport(ca_signature_ok, validity_ok, not_revoked, subject_ok, key_usage_ok, valid, reason)`
-  - `GET /api/users/directory` $\rightarrow$ `[{"id": 1, "name": "...", "email": "...", "cert_serial": 101, "fingerprint": "...", "status": "active"}]`
-  - `POST /api/admin/certificates/<serial>/revoke` $\rightarrow$ `{"message": "Certificate revoked"}`
-- **Security Requirements:**
-  - Root CA private key encrypted at rest; script refuses to run if `CIPHERLOCK_CA_PASSPHRASE` environment variable is unset. Key file set to permission `0600`.
-  - Certificate verification enforces CA signature, temporal validity, database revocation status, Subject email matching, and KeyUsage constraints.
-- **Tests Required:**
-  - Run `pytest backend/tests/test_ca_certs.py` (test valid cert, rogue CA cert rejection, expired cert rejection, revoked cert rejection, email mismatch rejection, DER byte tampering).
-  - Run `openssl verify -CAfile certificates/ca/ca_cert.pem certificates/users/1.pem` (must return `OK`).
-- **Acceptance Criteria:**
-  - `init_ca.py` successfully initializes the Root CA.
-  - User registration issues a valid X.509 certificate verified by OpenSSL.
-  - Admin panel displays CA statistics and user certificates; revoking a cert immediately invalidates it in `verify_certificate`.
-- **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 4 upon phase completion.*
+- **Implementation scope:** Phase 4 only. RSA-OAEP wrapping, RSA-PSS signatures, encrypted file packages, file uploads, and receiver decryption remain Phase 5+ work.
 
----
+#### Exact Phase 4 implementation
+1. `crypto/ca.py` creates a self-signed RSA-4096 Root CA with `CN=CipherLock Root CA`, `O=CipherLock`, `C=IN`, approximately 10-year validity, `BasicConstraints(ca=True,path_length=0)`, and critical `KeyUsage(key_cert_sign=True, crl_sign=True)`.
+2. The CA private key is serialized as encrypted PKCS#8 using `BestAvailableEncryption` and the `CIPHERLOCK_CA_PASSPHRASE` environment/config value. It is written to `keys/ca/ca_key.pem` and best-effort restricted to mode `0600`. The public CA certificate is written to `certificates/ca/ca_cert.pem`.
+3. `issue_user_certificate()` issues a one-year X.509 end-entity certificate for the user's existing RSA-3072 public key. Subject contains `CN=name` and `emailAddress=email`; SAN contains the email; `BasicConstraints.ca=False`; critical `KeyUsage` enables `digital_signature` and `key_encipherment`; certificates are signed with SHA-256 using the Root CA private key.
+4. `models/provisioning.py` keeps the Phase 3 registration transaction intact: RSA key generation/protection occurs first, CA issuance occurs before the final commit, then `users.certificate` and the `certificates` row are written. A public PEM copy is stored at `certificates/users/<user_id>.pem`. Any exception propagates to the existing registration transaction and causes rollback.
+5. `crypto/certificates.py` returns `CertReport` with CA signature, validity, revocation, subject/email, and KeyUsage checks. Validation fails closed if the certificate is malformed, CA trust fails, it is outside its validity period, its serial is absent/revoked in the database, the expected email does not match, or required KeyUsage flags are missing.
+6. `routes/users.py` exposes the authenticated certificate directory at `GET /api/users/directory` and certificate details at `GET /api/users/<id>/certificate`.
+7. `routes/admin.py` exposes admin-only CA statistics at `GET /api/admin/ca-info`, certificate inventory at `GET /api/admin/certificates`, and immediate revocation at `POST /api/admin/certificates/<serial>/revoke`.
+8. Frontend adds a polished trust directory, certificate inspection page, and admin CA panel. The dashboard and navbar now surface Phase 4 as live functionality.
+9. `scripts/init_ca.py` is the explicit production CA bootstrap command. `scripts/create_admin.py` creates an admin user and provisions its cryptographic identity after the CA exists.
+
+#### Security boundary / important repository deviations
+- **Do not auto-create a production Root CA in `create_app()`.** Production setup must explicitly set `CIPHERLOCK_CA_PASSPHRASE` and run `python scripts/init_ca.py`.
+- For test applications only, `models/provisioning.py` can create an isolated disposable CA when `app.testing` is true and no test passphrase is supplied. This exists solely to keep earlier registration tests self-contained and does not run in production.
+- The existing Phase 3 implementation protects user private-key material with the configured Flask `SECRET_KEY` + HKDF/AES-GCM envelope, not directly with the user's password. This is an existing Phase 3 repository behavior and is intentionally **not changed in Phase 4**. Future agents must preserve this actual interface unless a dedicated security refactor is approved.
+- The repository layout is root-level (`crypto/`, `models/`, `routes/`, `tests/`), not the `backend/` path used by some original planning text.
+
+#### APIs / module contracts
+- `crypto/ca.py`: `init_ca()`, `load_ca()`, `issue_user_certificate(name, email, public_key) -> tuple[bytes, int]`, `revoke_certificate(serial) -> bool`.
+- `crypto/certificates.py`: `load_certificate(pem)`, `verify_certificate(cert_pem, expected_email=None) -> CertReport`.
+- `GET /api/users/directory` → `{"users": [{"id", "name", "email", "cert_serial", "fingerprint", "status", "expires_at"}]}`.
+- `GET /api/users/<id>/certificate` → certificate PEM, subject/issuer/serial/validity, and verification report.
+- `GET /api/admin/ca-info` → non-secret Root CA metadata and active/revoked counts.
+- `GET /api/admin/certificates` → administrative certificate inventory.
+- `POST /api/admin/certificates/<serial>/revoke` → revokes the active certificate and makes subsequent `verify_certificate()` calls invalid.
+
+#### Required local verification before marking Phase 4 fully COMPLETE
+1. `python -m pip install -r requirements.txt`
+2. `python scripts/check_env.py` — confirm CA passphrase is configured without printing its value.
+3. Set a strong local `CIPHERLOCK_CA_PASSPHRASE` in `.env`.
+4. `python scripts/init_ca.py`.
+5. `python scripts/create_admin.py`.
+6. `python -m pytest -q` — all previous phases + Phase 4 must pass.
+7. `cd frontend && npm ci && npm run build`.
+8. `openssl x509 -in certificates/ca/ca_cert.pem -noout -subject -issuer -serial -dates`.
+9. Register a normal user and verify `certificates/users/<id>.pem` exists.
+10. `openssl verify -CAfile certificates/ca/ca_cert.pem certificates/users/<id>.pem` must return `OK`.
+11. Log in as admin, open `/admin`, revoke a certificate, then confirm the certificate changes to revoked/untrusted and the directory no longer lists it as active.
+12. `git diff --check` and `git status` must be clean apart from intended Phase 4 files before commit.
+
+#### Acceptance criteria
+- Root CA is RSA-4096, self-signed, encrypted at rest, and never exposes its private key through an API/UI.
+- Every newly registered user receives a CA-signed one-year X.509 certificate tied to the user's RSA-3072 public key.
+- Certificate validation checks trust, validity, revocation, identity, and key usage.
+- Revocation immediately changes validation outcome.
+- Directory, certificate viewer, and admin CA panel are authenticated/authorized.
+- No plaintext user private key, CA private key, password, or CA passphrase is returned by any API.
+- Phase 5 can consume `users.public_key`, `users.certificate`, certificate serials, and the certificate verification functions without changing the Phase 4 contracts.
 
 ### Phase 5 — RSA-OAEP Key Wrapping and RSA-PSS Digital Signatures
 
@@ -620,8 +631,8 @@ Later phases depend on exact python function signatures and REST endpoints:
 |---|---|---|---|---|---|
 | **Phase 1** | Developer 1 (Agent 1) | `COMPLETE` | 2026-10-07 | 6 passed | Flask factory, config, SQLite schema (4 tables), Bootstrap landing page, error pages, `/health`, CSRF, session security, `check_env.py`, `pytest.ini`, `conftest.py`, `README.md`, `CONTRIBUTING.md`, `docs/ARCHITECTURE.md` |
 | **Phase 2** | Developer 2 (Agent 2) | `COMPLETE` | 2026-10-08 | 28 passed | scrypt authentication, in-memory lockout (5 failures / 300s), session management, CSRF client integration, React 18 + Vite + Tailwind v3 SPA under `frontend/`, activity logging, tests/test_auth.py |
-| **Phase 3** | Developer 3 (Agent 3) | `NOT_STARTED` | — | — | Pending Phase 3 execution |
-| **Phase 4** | Developer 4 (Agent 4) | `NOT_STARTED` | — | — | Pending Phase 4 execution |
+| **Phase 3** | Developer 3 (Agent 3) | `COMPLETE` | 2026-10-08 | Crypto core | Complete |
+| **Phase 4** | Developer 4 (Agent 4) | `IMPLEMENTED / VERIFY` | 2026-10-08 | Mini CA + X.509 | Local verification pending |
 | **Phase 5** | Developer 5 (Agent 5) | `NOT_STARTED` | — | — | Pending Phase 5 execution |
 | **Phase 6** | Developer 6 (Agent 6) | `NOT_STARTED` | — | — | Pending Phase 6 execution |
 | **Phase 7** | Developer 7 (Agent 7) | `NOT_STARTED` | — | — | Pending Phase 7 execution |
@@ -724,10 +735,28 @@ Later phases depend on exact python function signatures and REST endpoints:
 6. Add CLI demo `scripts/demo_aes.py` and write tests `tests/test_aes.py` and `tests/test_rsa_keys.py`. Ensure all 28 existing tests continue to pass.
 
 ### Phase 3 Handoff Notes
-*Status: Pending*
+*Status: COMPLETE — 2026-10-08*
+
+See the Phase 3 section above. The important live repository contract is that `models/provisioning.py` stores a protected private-key envelope based on the configured application `SECRET_KEY` and user ID; Phase 4 preserves that contract.
 
 ### Phase 4 Handoff Notes
-*Status: Pending*
+*Status: IMPLEMENTED — 2026-10-08; local verification pending*
+
+**Files created:** `crypto/ca.py`, `crypto/certificates.py`, `scripts/init_ca.py`, `scripts/create_admin.py`, `tests/test_ca_certs.py`, `frontend/src/pages/Directory.jsx`, `frontend/src/pages/CertificateView.jsx`, `frontend/src/pages/admin/AdminPanel.jsx`.
+
+**Files modified:** `crypto/rsa.py`, `models/provisioning.py`, `routes/users.py`, `routes/admin.py`, `frontend/src/App.jsx`, `frontend/src/components/Navbar.jsx`, `frontend/src/pages/Dashboard.jsx`, `IMPLEMENTATION_PLAN.md`.
+
+**Database:** Existing Phase 1 `certificates` table was reused; no schema migration is required. The table stores the user certificate PEM, serial, issued/expiry timestamps and active/revoked status.
+
+**Registration flow now:** `POST /api/auth/register` → create user row → generate RSA-3072 keypair → protect private key using existing Phase 3 envelope → load explicit Root CA → issue one-year X.509 certificate → update `users.public_key`, `users.encrypted_private_key`, `users.certificate` → insert `certificates` row → write `certificates/users/<id>.pem` → commit. Any error rolls back the DB transaction.
+
+**Trust flow:** Certificate validation checks issuer + CA signature, validity dates, DB revocation/registration status, expected email identity, and required KeyUsage. It fails closed.
+
+**Admin flow:** `scripts/create_admin.py` creates an admin identity. Admin UI calls `/api/admin/ca-info`, `/api/admin/certificates`, and POST `/api/admin/certificates/<serial>/revoke`.
+
+**Verification performed in this environment:** `python -m compileall -q .` passed. Full pytest and frontend build could not be executed in the sandbox because Flask/npm dependencies were not installed and outbound package/network access is unavailable. Do not report the Phase 4 test suite as passed until it is run locally.
+
+**Next agent must do:** install dependencies; set `CIPHERLOCK_CA_PASSPHRASE`; run `python scripts/init_ca.py`; create an admin; run full pytest and frontend build; perform OpenSSL certificate verification; then commit/push this phase to `main`. After that, Phase 5 can implement RSA-OAEP wrapping and RSA-PSS signatures using the existing certificate/public-key contracts.
 
 ### Phase 5 Handoff Notes
 *Status: Pending*

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
@@ -77,3 +77,16 @@ def load_public_key(pem: bytes) -> RSAPublicKey:
     if not isinstance(key, RSAPublicKey):
         raise KeyFormatError("Serialized key is not an RSA public key.")
     return key
+
+
+def public_key_fingerprint(public_key: RSAPublicKey) -> str:
+    """Return the SHA-256 fingerprint of a SubjectPublicKeyInfo DER key."""
+    if not isinstance(public_key, RSAPublicKey):
+        raise TypeError("An RSA public key is required.")
+    der = public_key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(der)
+    return digest.finalize().hex()

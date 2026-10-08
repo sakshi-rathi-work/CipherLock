@@ -9,6 +9,9 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+import Directory from "./pages/Directory";
+import CertificateView from "./pages/CertificateView";
+import AdminPanel from "./pages/admin/AdminPanel";
 import Spinner from "./components/Spinner";
 
 function RootRedirect() {
@@ -47,6 +50,9 @@ export default function App() {
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/directory" element={<ProtectedRoute><Directory /></ProtectedRoute>} />
+              <Route path="/directory/:userId" element={<ProtectedRoute><CertificateView /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
               <Route
                 path="/dashboard"
                 element={

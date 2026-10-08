@@ -49,6 +49,20 @@ export default function Navbar() {
           {isAuthenticated ? (
             <div className="flex items-center space-x-4 pl-4 border-l border-[#24425f]">
               <Link
+                to="/directory"
+                className="text-[#ced9df] hover:text-white transition-colors"
+              >
+                Certificates
+              </Link>
+              {user?.is_admin && (
+                <Link
+                  to="/admin"
+                  className="text-[#ced9df] hover:text-white transition-colors"
+                >
+                  CA Admin
+                </Link>
+              )}
+              <Link
                 to="/dashboard"
                 className="flex items-center space-x-1.5 text-[#ced9df] hover:text-white transition-colors"
               >
@@ -121,6 +135,22 @@ export default function Navbar() {
             <>
               <div className="pt-2 border-t border-[#24425f]">
                 <div className="text-xs text-[#9dafbc] mb-2">Signed in as {user?.name}</div>
+                <Link
+                  to="/directory"
+                  className="block text-[#ced9df] hover:text-white py-1"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Certificates
+                </Link>
+                {user?.is_admin && (
+                  <Link
+                    to="/admin"
+                    className="block text-[#ced9df] hover:text-white py-1"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    CA Admin
+                  </Link>
+                )}
                 <Link
                   to="/dashboard"
                   className="block text-[#ced9df] hover:text-white py-1"

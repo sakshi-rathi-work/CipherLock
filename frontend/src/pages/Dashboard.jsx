@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
 import {
@@ -12,6 +13,7 @@ import {
   CheckCircle,
   Clock,
   Lock,
+  Award,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -202,13 +204,22 @@ export default function Dashboard() {
       <div className="border-t border-line pt-8">
         <div className="mb-4">
           <p className="eyebrow text-ink-muted">CRYPTOGRAPHIC MODULES</p>
-          <h2 className="text-xl font-bold text-ink">Upcoming Features</h2>
-          <p className="text-xs text-ink-muted">
-            These components are scheduled for subsequent project implementation phases.
-          </p>
+          <h2 className="text-xl font-bold text-ink">Security Modules</h2>
+          <p className="text-xs text-ink-muted">Phase 4 is now live; later file-sharing modules remain staged for subsequent phases.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Certificate Directory */}
+          <Link to="/directory" className="bg-white border border-line rounded-xl p-5 shadow-card hover:-translate-y-0.5 transition-transform relative">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 rounded-lg bg-navy text-lime"><Award className="w-5 h-5" /></div>
+              <span className="text-[10px] font-mono font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">LIVE</span>
+            </div>
+            <h3 className="font-bold text-sm text-ink mb-1">Certificate Directory</h3>
+            <p className="text-xs text-ink-muted mb-3">Inspect trusted X.509 identities issued by the CipherLock Root CA.</p>
+            <span className="text-[11px] font-mono text-emerald-700 font-medium">Phase 4 enabled →</span>
+          </Link>
+
           {/* Send File */}
           <div className="bg-slate-50 border border-dashed border-line rounded-xl p-5 opacity-75 relative">
             <div className="flex justify-between items-start mb-3">
@@ -248,23 +259,21 @@ export default function Dashboard() {
           </div>
 
           {/* Certificates */}
-          <div className="bg-slate-50 border border-dashed border-line rounded-xl p-5 opacity-75 relative">
+          <Link to="/directory" className="bg-white border border-emerald-200 rounded-xl p-5 shadow-card relative hover:-translate-y-0.5 transition-transform">
             <div className="flex justify-between items-start mb-3">
-              <div className="p-2 rounded-lg bg-slate-200 text-slate-600">
-                <Award className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-mono font-semibold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">
-                Phase 4
+              <div className="p-2 rounded-lg bg-navy text-lime"><Award className="w-5 h-5" /></div>
+              <span className="text-[10px] font-mono font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                LIVE
               </span>
             </div>
             <h3 className="font-bold text-sm text-ink mb-1">X.509 Certificate</h3>
             <p className="text-xs text-ink-muted mb-3">
-              Mini Certificate Authority issuance and validity verification.
+              Mini Certificate Authority issuance, verification, directory and revocation.
             </p>
-            <span className="text-[11px] font-mono text-slate-500 font-medium">
-              Available in Phase 4
+            <span className="text-[11px] font-mono text-emerald-700 font-medium">
+              Open certificate directory →
             </span>
-          </div>
+          </Link>
 
           {/* Cryptographic Keys */}
           <div className="bg-slate-50 border border-dashed border-line rounded-xl p-5 opacity-75 relative">

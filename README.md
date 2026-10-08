@@ -8,7 +8,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 3 — Crypto Core** (Complete)
+**Phase 4 â€” Mini CA and X.509 Certificates** (Implementation complete; local verification pending)
 
 ### Implemented in Phase 2
 
@@ -48,7 +48,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 | 1 | Application foundation & schema | `COMPLETE` |
 | 2 | User authentication & models | `COMPLETE` |
 | 3 | RSA key-pair setup and AES-GCM primitives | `COMPLETE` |
-| 4 | Mini certificate authority and X.509 certificates | Next |
+| 4 | Mini certificate authority and X.509 certificates | `IMPLEMENTED / VERIFY` |
 | 5 | RSA-OAEP key wrapping and RSA-PSS signatures | Planned |
 | 6 | Hybrid encrypted file package | Planned |
 | 7 | Secure file storage and sharing workflows | Planned |
@@ -185,3 +185,12 @@ Run the complete backend suite with `python -m pytest -q`.
 - Brute-force lockout enforces a maximum of 5 failed attempts per (email, IP) within a 300-second window.
 - CSRF synchronizer tokens are required for all state-mutating requests (`POST`, `PUT`, `DELETE`).
 - Parameterized SQL is used across all database queries to prevent SQL injection.
+### Implemented in Phase 4
+
+- **Mini Root CA:** RSA-4096 self-signed Root CA with encrypted PKCS#8 private key, 10-year validity, CA BasicConstraints and certificate-signing KeyUsage.
+- **User X.509 Certificates:** One-year certificates bound to each user's RSA-3072 public key, with CN/email identity, SAN email, and digitalSignature + keyEncipherment KeyUsage.
+- **Certificate Verification:** CA signature, validity period, database revocation state, expected email, and KeyUsage are checked fail-closed.
+- **Certificate Directory:** Authenticated directory with public-key fingerprints and certificate status.
+- **Certificate Viewer:** Human-readable X.509 details, verification chain and PEM view.
+- **Admin CA Panel:** Root CA statistics, certificate inventory and immediate revocation.
+- **Bootstrap Scripts:** `scripts/init_ca.py` and `scripts/create_admin.py`.
