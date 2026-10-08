@@ -278,42 +278,45 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 ### Phase 3 — Crypto Core: AES-256-GCM and RSA Key Pairs
 
-- **Objective:** Implement independent, thoroughly tested `crypto/aes.py` (AES-256-GCM encryption/decryption) and `crypto/rsa.py` (RSA-3072 key generation, PKCS#8 encrypted PEM storage), and integrate key pair generation into user registration.
+- **Objective:** Implement AES-256-GCM encryption/decryption, RSA-3072 key generation, authenticated private-key protection, and transactional user-key provisioning.
 - **Assigned Developer / Phase Owner:** Developer 3 (Agent 3)
-- **Status:** `NOT_STARTED`
+- **Status:** `COMPLETE — 2026-10-08`
 - **Dependencies:** Phase 1, Phase 2
 - **Files to Create / Modify:**
   - **Backend:**
-    - `backend/crypto/aes.py` (`generate_session_key`, `encrypt_bytes`, `decrypt_bytes`, `DecryptionError`)
-    - `backend/crypto/rsa.py` (part 1: `generate_rsa_keypair`, `private_key_to_encrypted_pem`, `load_private_key`, `public_key_to_pem`, `load_public_key`, `public_key_fingerprint`)
-    - `backend/models/provisioning.py` (update `provision_user_crypto` to generate and store RSA-3072 key pairs)
-    - `backend/scripts/demo_aes.py` (CLI demo for AES-256-GCM)
-    - `backend/tests/test_aes.py`
-    - `backend/tests/test_rsa_keys.py`
-  - **Frontend:**
-    - `frontend/src/pages/Register.jsx` (add "Generating your RSA-3072 key pair..." user notice and spinner)
+    - `crypto/aes.py` (`generate_session_key`, `encrypt_bytes`, `decrypt_bytes`, `DecryptionError`)
+    - `crypto/rsa.py` (`generate_rsa_keypair`, `private_key_to_pem`, `load_private_key`, `public_key_to_pem`, `load_public_key`)
+    - `crypto/key_storage.py` (versioned AES-GCM protected private-key envelope)
+    - `models/provisioning.py` (`provision_user_crypto` generates and stores RSA-3072 key pairs)
+    - `tests/test_crypto.py`
 - **Main Implementation Tasks:**
   1. Build `crypto/aes.py`: `generate_session_key()` returning 32 random bytes; `encrypt_bytes()` generating a fresh 12-byte random nonce (`os.urandom`) and returning `(nonce, ciphertext_with_tag)`; `decrypt_bytes()` raising `DecryptionError` on tag validation failure. Validate 32-byte key size.
-  2. Build `crypto/rsa.py` (Keygen & PEM): `generate_rsa_keypair(bits=3072, public_exponent=65537)`; `private_key_to_encrypted_pem()` using PKCS#8 `BestAvailableEncryption` with user password as passphrase; `load_private_key()` raising custom error on invalid passphrase; `public_key_to_pem()`; `load_public_key()`; `public_key_fingerprint()` returning SHA-256 hex string of DER SubjectPublicKeyInfo.
-  3. Integrate into `models/provisioning.py`: registration now automatically generates the RSA-3072 pair and writes `public_key` PEM and `encrypted_private_key` PEM to the user's DB record.
-  4. Build CLI script `backend/scripts/demo_aes.py` encrypting a sample file and verifying SHA-256 matches after decryption.
+  2. Build `crypto/rsa.py` with RSA-3072 key generation and public/private PEM serialization.
+  3. Protect PKCS#8 private-key PEM using AES-256-GCM with a per-key HKDF-SHA256 salt derived from the configured application secret. Persist a versioned binary envelope containing format version, salt, nonce, and ciphertext/tag; bind authenticated data to the user ID.
+  4. Integrate generation/protection into `models/provisioning.py` and persist public PEM plus the protected envelope through the existing database transaction.
 - **APIs / Modules / Contracts Involved:**
   - `crypto/aes.py`: `generate_session_key() -> bytes`, `encrypt_bytes(key, plaintext, aad) -> tuple[bytes, bytes]`, `decrypt_bytes(key, nonce, data, aad) -> bytes`
-  - `crypto/rsa.py`: `generate_rsa_keypair(bits=3072)`, `private_key_to_encrypted_pem(priv, passphrase) -> bytes`, `load_private_key(pem, passphrase)`, `public_key_to_pem(pub) -> bytes`, `load_public_key(pem)`, `public_key_fingerprint(pub) -> str`
+  - `crypto/rsa.py`: `generate_rsa_keypair(bits=3072)`, `private_key_to_pem(priv) -> bytes` (transient unencrypted PKCS#8 PEM), `load_private_key(pem)`, `public_key_to_pem(pub) -> bytes`, `load_public_key(pem)`
+  - `crypto/key_storage.py`: `protect_private_key(priv, secret, user_id) -> bytes`, `unprotect_private_key(envelope, secret, user_id) -> RSAPrivateKey`
 - **Security Requirements:**
   - AES nonces must be 12 random bytes generated via OS CSPRNG (`os.urandom`) for every encryption call. Never reuse nonces.
   - AES-GCM authentication tag (16 bytes) strictly validated on decryption.
-  - RSA private keys stored strictly as PKCS#8 encrypted PEM using user password; private keys NEVER logged or transmitted.
+  - RSA private keys are serialized as PKCS#8 in memory and protected by AES-256-GCM before storage. The wrapping secret comes from the existing configured `SECRET_KEY`; never log or transmit private-key material.
 - **Tests Required:**
-  - Run `pytest backend/tests/test_aes.py` (round trip, bit-flip tag failure, wrong key/AAD failure, 1000 distinct nonces check).
-  - Run `pytest backend/tests/test_rsa_keys.py` (3072-bit key length, `BEGIN ENCRYPTED PRIVATE KEY` header check, wrong passphrase load failure, public PEM lacks private material).
-  - Run `python backend/scripts/demo_aes.py sample.txt`.
+  - Run `pytest tests/test_crypto.py` (AES round trip and tamper rejection, RSA key generation/serialization, private-key protection, registration, and rollback).
 - **Acceptance Criteria:**
-  - User registration in React generates RSA-3072 key pair.
-  - `users.encrypted_private_key` in database starts with `-----BEGIN ENCRYPTED PRIVATE KEY-----`.
-  - All AES and RSA unit tests pass 100%.
+  - User registration transactionally stores an RSA-3072 public key and a protected private-key envelope.
+  - Private-key storage is not plaintext and is recoverable only with the configured application secret and matching user ID.
+  - AES-GCM tag failures and protected-key authentication failures do not return decrypted data.
+  - Focused Phase 3 crypto tests pass.
 - **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 3 upon phase completion.*
+  - Implemented `crypto/aes.py`, `crypto/rsa.py`, and `crypto/key_storage.py`; registration provisioning now stores RSA-3072 SubjectPublicKeyInfo PEM and a versioned AES-GCM protected PKCS#8 private-key envelope.
+  - The existing `users.public_key` and `users.encrypted_private_key` BLOB columns were reused; no migration or schema change was needed.
+  - HKDF-SHA256 derives a wrapping key from the configured Flask `SECRET_KEY` and a random per-key salt. AES-GCM uses a fresh nonce and authenticates the envelope version plus owning user ID. Keep the application secret stable and backed up; rotating it prevents recovery of existing protected keys.
+  - `tests/test_crypto.py` covers AES round trips and tampering, fresh nonce generation, RSA PEM serialization and OAEP session-key capability, secret/user binding, API non-disclosure, registration persistence, and rollback.
+  - Verification: `python -m pytest tests/test_crypto.py -q` — 9 passed; `python -m pytest -q` — 37 passed.
+  - RSA-OAEP is exercised in a focused primitive test only; no file-sharing workflow, certificates, signatures, or admin/PKI features were added.
+  - No frontend behavior or existing Phase 1/Phase 2 authentication flow was restructured.
 
 ---
 

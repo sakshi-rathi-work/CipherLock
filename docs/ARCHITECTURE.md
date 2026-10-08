@@ -1,12 +1,13 @@
 # CipherLock – System Architecture
 
-> **Status:** Phase 2 Complete (Authentication & Database Models)  
+> **Status:** Phase 3 Complete (AES-GCM and protected RSA keys)
 > **Last updated:** 2026-10-08
 
 This document describes the structural and design decisions of CipherLock.
 Phase 1 established the application foundation and SQLite schema.
-Phase 2 introduces authentication, scrypt password hashing, brute-force lockout,
+Phase 2 introduced authentication, scrypt password hashing, brute-force lockout,
 session management, and the React 18 + Vite + Tailwind v3 SPA (`frontend/`).
+Phase 3 adds AES-256-GCM primitives and RSA-3072 user-key provisioning.
 
 ```
 Browser ──HTTP──► Flask app (app.py) ◄── Vite Proxy (/api) ◄── React SPA (frontend/)
@@ -16,7 +17,10 @@ Browser ──HTTP──► Flask app (app.py) ◄── Vite Proxy (/api) ◄�
                      ├── models/user.py     (scrypt hashing, user CRUD, password policy)
                      ├── models/activity.py (security audit log)
                      ├── models/lockout.py  (in-memory brute-force lockout: 5 fails / 300s)
-                     ├── models/provisioning.py (crypto provisioning placeholder hook)
+                     ├── models/provisioning.py (transactional user-key provisioning)
+                     ├── crypto/aes.py      (AES-256-GCM byte encryption)
+                     ├── crypto/rsa.py      (RSA-3072 generation and PEM serialization)
+                     ├── crypto/key_storage.py (versioned AES-GCM private-key envelope)
                      ├── database/db.py     (SQLite helpers with PRAGMA foreign_keys)
                      ├── database/schema.sql
                      └── templates/         (Phase 1 server-rendered Jinja2 landing)
@@ -85,7 +89,7 @@ idempotent and safe to run repeatedly:
 
 | Table | Purpose |
 |---|---|
-| `users` | Identity; future password hash, public key, encrypted private key, certificate |
+| `users` | Identity, scrypt password hash, public key, protected private key, certificate |
 | `files` | File transfer metadata; future encrypted filename, session key, nonce, signature, status |
 | `certificates` | X.509 certificate records; future serial, validity dates, revocation status |
 | `activity_log` | Audit trail; future user-linked action records |
@@ -164,13 +168,23 @@ stylesheets, and finally `main.js` with `defer` so it never blocks rendering.
 
 ---
 
-## Security Posture (Phase 1)
+## Security Posture (Phases 1–3)
 
-No cryptographic operations are active in Phase 1.  The security measures
-that are in place are limited to:
+AES-GCM encryption/decryption primitives and protected RSA private-key
+provisioning are active. Full file encryption/sharing, session-key wrapping
+workflow, certificates, and signatures remain future work. Current protections:
 
-- **CSRF protection** via Flask-WTF (`CSRFProtect`).  All state-changing
-  routes in later phases will be protected automatically.
+- **AES-256-GCM** uses fresh 12-byte nonces and authenticates ciphertext/tag
+  during decryption.
+- **RSA-3072** private keys are serialized as PKCS#8 in memory and protected
+  before persistence with AES-256-GCM. The versioned envelope contains an
+  HKDF-SHA256 salt, nonce, and authenticated ciphertext and is bound to its
+  user ID.
+- **Key derivation** uses the existing configured Flask `SECRET_KEY`, with a
+  per-key random salt and distinct HKDF context. Keep that secret stable and
+  backed up: rotating it makes existing protected private keys unrecoverable.
+- **CSRF protection** via Flask-WTF (`CSRFProtect`) covers state-changing
+  routes.
 - **HttpOnly, SameSite=Lax cookies** with a 30-minute lifetime.
 - **Secret key** never committed to version control; generated locally if
   not supplied via `$SECRET_KEY`.
@@ -190,6 +204,7 @@ pages, and creates the expected database schema.
 | `conftest.py` | Session-scoped `app` and `client` fixtures |
 | `pytest.ini` | Test discovery, warning filters, output flags |
 | `tests/test_app.py` | Landing page (200), health JSON, four DB tables, 403/404/413 pages |
+| `tests/test_crypto.py` | AES-GCM, RSA serialization, protected private keys, and registration provisioning |
 
 Tests use `tmp_path` / `tmp_path_factory` so the production database is
 never touched and tests remain fully isolated from one another.

@@ -8,7 +8,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 2 — Authentication and Database Models** (Complete)
+**Phase 3 — Crypto Core** (Complete)
 
 ### Implemented in Phase 2
 
@@ -33,14 +33,22 @@ The system is designed around confidentiality, integrity, sender authentication,
 - SQLite schema with 4 contract tables (`users`, `files`, `certificates`, `activity_log`).
 - Server-rendered Bootstrap 5 project landing page at `/` and `/health` monitoring endpoint.
 
+### Implemented in Phase 3
+
+- **AES-256-GCM primitives:** `crypto/aes.py` generates 256-bit keys, creates a fresh 96-bit nonce per encryption, returns ciphertext with the GCM tag, and raises `DecryptionError` if authentication fails.
+- **RSA-3072 key generation:** `crypto/rsa.py` generates RSA key pairs and serializes public keys as SubjectPublicKeyInfo PEM.
+- **Protected private-key storage:** `crypto/key_storage.py` encrypts PKCS#8 private-key PEM with AES-256-GCM. A per-key random salt derives a wrapping key from the existing configured Flask `SECRET_KEY` using HKDF-SHA256; the versioned database envelope stores the salt, nonce, and authenticated ciphertext. The envelope is bound to the owning user ID.
+- **Registration provisioning:** `models/provisioning.py` stores the public key and protected private-key envelope within the existing registration transaction. No schema change was needed.
+- **Phase 3 tests:** `tests/test_crypto.py` covers AES authentication and round trips, RSA serialization and session-key encryption capability, protected-key recovery/failure, registration storage/exposure, and transaction rollback.
+
 ### Upcoming Phases
 
 | Phase | Planned focus | Status |
 | --- | --- | --- |
 | 1 | Application foundation & schema | `COMPLETE` |
 | 2 | User authentication & models | `COMPLETE` |
-| 3 | RSA key-pair setup and AES-GCM file encryption | Next |
-| 4 | Mini certificate authority and X.509 certificates | Planned |
+| 3 | RSA key-pair setup and AES-GCM primitives | `COMPLETE` |
+| 4 | Mini certificate authority and X.509 certificates | Next |
 | 5 | RSA-OAEP key wrapping and RSA-PSS signatures | Planned |
 | 6 | Hybrid encrypted file package | Planned |
 | 7 | Secure file storage and sharing workflows | Planned |
@@ -161,7 +169,13 @@ Or with Python:
 python -m pytest -v
 ```
 
-**Expected Result:** `28 passed` (6 Phase 1 baseline tests + 22 Phase 2 auth tests).
+The Phase 3 tests run with:
+
+```bash
+python -m pytest tests/test_crypto.py -q
+```
+
+Run the complete backend suite with `python -m pytest -q`.
 
 ## Security Notes
 
