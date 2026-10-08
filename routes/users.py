@@ -49,6 +49,7 @@ def directory():
 
 
 @users_bp.get("/<int:user_id>/certificate")
+@users_bp.get("/<int:user_id>/certificate/view")
 @login_required
 def certificate(user_id: int):
     """Return a user's certificate in PEM plus a structured trust report."""
