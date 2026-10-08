@@ -8,7 +8,8 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 4 â€” Mini CA and X.509 Certificates** (Implementation complete; local verification pending)
+**Phase 4 — Implementation Complete**
+**Phase 5 — RSA-OAEP Key Wrapping and RSA-PSS Digital Signatures**
 
 ### Implemented in Phase 2
 
@@ -48,7 +49,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 | 1 | Application foundation & schema | `COMPLETE` |
 | 2 | User authentication & models | `COMPLETE` |
 | 3 | RSA key-pair setup and AES-GCM primitives | `COMPLETE` |
-| 4 | Mini certificate authority and X.509 certificates | `IMPLEMENTED / VERIFY` |
+| 4 | Mini certificate authority and X.509 certificates | `COMPLETE` |
 | 5 | RSA-OAEP key wrapping and RSA-PSS signatures | Planned |
 | 6 | Hybrid encrypted file package | Planned |
 | 7 | Secure file storage and sharing workflows | Planned |
@@ -74,6 +75,12 @@ The system is designed around confidentiality, integrity, sender authentication,
 | `POST` | `/api/auth/logout` | Terminate session and audit logout | No | Yes |
 | `GET` | `/api/auth/me` | Fetch authenticated user profile | Yes | No |
 | `GET` | `/api/auth/activity`| Fetch user's recent security audit events | Yes | No |
+| `GET` | `/api/users/directory` | List active users with certificate status and public-key fingerprints | Yes | No |
+| `GET` | `/api/users/<id>/certificate` | Return a user's certificate in PEM format with verification report | Yes | No |
+| `GET` | `/api/users/<id>/certificate/view` | Return human-readable certificate details and PEM | Yes | No |
+| `GET` | `/api/admin/ca-info` | Return Root CA metadata and certificate statistics | Admin | No |
+| `GET` | `/api/admin/certificates` | List issued certificates and their status | Admin | No |
+| `POST` | `/api/admin/certificates/<serial>/revoke` | Revoke a certificate by serial number | Admin | Yes |
 
 ## Project Structure
 
@@ -83,27 +90,40 @@ config.py                 Environment-backed configuration and local paths
 init_db.py                Database initialization command
 database/
   db.py                   SQLite connection lifecycle and initializer
-  schema.sql              Versioned SQLite database schema (4 tables)
+  schema.sql              Versioned SQLite database schema
+crypto/
+  aes.py                   AES-256-GCM primitives
+  rsa.py                   RSA key generation and serialization
+  key_storage.py           Protected private-key storage
+  ca.py                    Root CA and user certificate issuance
+  certificates.py          X.509 certificate verification
 models/
   user.py                 User CRUD, scrypt hashing, password validation
   activity.py             Security audit logging and activity queries
   lockout.py              In-memory thread-safe brute-force lockout tracker
-  provisioning.py         Cryptographic provisioning placeholder hook
+  provisioning.py         User key and certificate provisioning
 routes/
   __init__.py             login_required and admin_required decorators
   auth.py                 Phase 2 authentication REST blueprint (/api/auth)
-  files.py, users.py, admin.py  Placeholder blueprints for later phases
+  files.py                File workflow routes for later phases
+  users.py                Certificate directory and user certificate routes
+  admin.py                CA administration and certificate management routes
 frontend/                 React 18 + Vite + Tailwind v3 SPA
   src/api/client.js       Axios client with CSRF token management
-  src/context/AuthContext.jsx Authentication state context and hooks
+  src/context/AuthContext.jsx  Authentication state context and hooks
   src/components/         Navbar, Footer, ProtectedRoute, PasswordInput, Spinner
-  src/pages/              Register, Login, Dashboard, NotFound
+  src/pages/              Register, Login, Dashboard, Directory, CertificateView, NotFound
+  src/pages/admin/        Admin CA management panel
 tests/
   test_app.py             Phase 1 baseline tests (6 tests)
   test_auth.py            Phase 2 authentication & security tests (22 tests)
+  test_crypto.py           Phase 3 cryptographic tests
+  test_ca_certs.py         Phase 4 CA and X.509 certificate tests
 templates/                Phase 1 landing page and error pages
 static/                   Phase 1 styles and scripts
 scripts/                  Diagnostic and verification scripts
+  init_ca.py              Root CA initialization
+  create_admin.py         Admin account bootstrap
 ```
 
 ## Setup and Running
