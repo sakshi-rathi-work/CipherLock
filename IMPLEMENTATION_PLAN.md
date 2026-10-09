@@ -13,8 +13,8 @@
 - **Overall Project Status:** IN_PROGRESS
 - **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4
 - **Current Blockers:** None for Phase 4. OpenSSL CLI verification was unavailable on the development machine; equivalent certificate inspection and cryptographic verification were completed using Python `cryptography`.
-- **Last Updated:** 2026-10-08
-- **Next Developer's Task:** Begin Phase 5: implement RSA-OAEP session-key wrapping/unwrapping, RSA-PSS digital signatures, SHA-256 hashing, tests, and the CLI demonstration.
+- **Last Updated:** 2026-10-09
+- **Next Developer's Task:** Complete the remaining Phase 5 work: RSA-PSS digital signatures, SHA-256 hashing, and the CLI demonstration.
 
 ---
 
@@ -380,7 +380,7 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 - **Objective:** Complete asymmetric cryptographic primitives in `crypto/rsa.py` (RSA-OAEP key wrapping/unwrapping) and construct `crypto/signatures.py` (RSA-PSS digital signatures and SHA-256 hashing).
 - **Assigned Developer / Phase Owner:** Developer 5 (Agent 5)
-- **Status:** `NOT_STARTED`
+- **Status:** `IN_PROGRESS` (RSA-OAEP key wrapping complete; RSA-PSS signatures pending)
 - **Dependencies:** Phase 3
 - **Files to Create / Modify:**
   - **Backend:**
@@ -390,9 +390,9 @@ Later phases depend on exact python function signatures and REST endpoints:
     - `backend/tests/test_wrap.py`
     - `backend/tests/test_signatures.py`
 - **Main Implementation Tasks:**
-  1. Extend `crypto/rsa.py`: `wrap_session_key(public_key, session_key)` using `padding.OAEP(mgf=MGF1(SHA256), algorithm=SHA256, label=None)`. Validate `session_key` is strictly 32 bytes. Implement `unwrap_session_key(private_key, wrapped)` raising custom `UnwrapError` on decryption/padding failure without exposing internal exception details.
-  2. Build `crypto/signatures.py`: `sign_data(private_key, data)` using `padding.PSS(mgf=MGF1(SHA256), salt_length=32)` with `SHA256`. Implement `verify_signature(public_key, data, signature) -> bool` catching `InvalidSignature` and returning boolean `True`/`False`. Implement `sha256_hex(data: bytes) -> str`.
-  3. Create CLI script `scripts/demo_wrap_sign.py` demonstrating wrapping 32-byte key (384 bytes wrapped length), randomized OAEP/PSS properties, verification success, and bit-flip detection.
+  1. [x] Extend `crypto/rsa.py`: `wrap_session_key(public_key, session_key)` using `padding.OAEP(mgf=MGF1(SHA256), algorithm=SHA256, label=None)`. Validate `session_key` is strictly 32 bytes. Implement `unwrap_session_key(private_key, wrapped)` raising custom `UnwrapError` on decryption/padding failure.
+  2. [ ] Build `crypto/signatures.py`: `sign_data(private_key, data)` using `padding.PSS(mgf=MGF1(SHA256), salt_length=32)` with `SHA256`. Implement `verify_signature(public_key, data, signature) -> bool` catching `InvalidSignature` and returning boolean `True`/`False`. Implement `sha256_hex(data: bytes) -> str`.
+  3. [ ] Create CLI script `scripts/demo_wrap_sign.py` demonstrating wrapping 32-byte key (384 bytes wrapped length), randomized OAEP/PSS properties, verification success, and bit-flip detection.
 - **APIs / Modules / Contracts Involved:**
   - `crypto/rsa.py`: `wrap_session_key(pub, key: bytes) -> bytes`, `unwrap_session_key(priv, wrapped: bytes) -> bytes`
   - `crypto/signatures.py`: `sign_data(priv, data: bytes) -> bytes`, `verify_signature(pub, data: bytes, sig: bytes) -> bool`, `sha256_hex(data: bytes) -> str`
@@ -795,7 +795,12 @@ See the Phase 3 section above. The important live repository contract is that `m
 Phase 4 is complete. Phase 5 can consume `users.public_key`, `users.certificate`, certificate serial numbers, and `verify_certificate()` without changing the Phase 4 certificate contracts. Phase 5 should implement RSA-OAEP session-key wrapping/unwrapping and RSA-PSS digital signatures.
 
 ### Phase 5 Handoff Notes
-*Status: Pending*
+*Status: In progress — RSA-OAEP key wrapping complete; RSA-PSS remains pending.*
+
+- Implemented `wrap_session_key` and `unwrap_session_key` in `crypto/rsa.py` using RSA-OAEP with SHA-256, MGF1-SHA-256, and no label. Wrapping accepts only 32-byte AES keys; unwrap failures raise `UnwrapError`.
+- Added focused wrap/unwrap tests in `tests/test_crypto.py`, including direct OAEP interoperability, wrong-recipient rejection, malformed ciphertext, input validation, and bytes output.
+- Verification: `C:\python314\python.exe -m pytest tests/test_crypto.py -k "rsa or session_key or malformed_wrapped or invalid_input"` — 11 passed; `C:\python314\python.exe -m pytest` — 51 passed. The bare `pytest` launcher selects a separate Anaconda environment and cannot import its missing `Flask-WTF` dependency; use the configured Python interpreter commands above.
+- Continue Phase 5 with RSA-PSS signatures, SHA-256 hashing, and the CLI demonstration. Do not treat Phase 5 as complete until those tasks pass.
 
 ### Phase 6 Handoff Notes
 *Status: Pending*
