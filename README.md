@@ -8,8 +8,8 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 4 — Implementation Complete**
-**Phase 5 — RSA-OAEP Key Wrapping and RSA-PSS Digital Signatures**
+**Phase 5 — Implementation Complete**
+**Phase 6 — Hybrid Encrypted File Package (CLI Proof)**
 
 ### Implemented in Phase 2
 
@@ -50,7 +50,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 | 2 | User authentication & models | `COMPLETE` |
 | 3 | RSA key-pair setup and AES-GCM primitives | `COMPLETE` |
 | 4 | Mini certificate authority and X.509 certificates | `COMPLETE` |
-| 5 | RSA-OAEP key wrapping and RSA-PSS signatures | Planned |
+| 5 | RSA-OAEP key wrapping and RSA-PSS signatures | `COMPLETE` |
 | 6 | Hybrid encrypted file package | Planned |
 | 7 | Secure file storage and sharing workflows | Planned |
 | 8 | Recipient verification and decryption | Planned |
@@ -93,7 +93,8 @@ database/
   schema.sql              Versioned SQLite database schema
 crypto/
   aes.py                   AES-256-GCM primitives
-  rsa.py                   RSA key generation and serialization
+  rsa.py                   RSA key generation, serialization, and OAEP key wrapping
+  signatures.py            RSA-PSS digital signatures and SHA-256 hashing
   key_storage.py           Protected private-key storage
   ca.py                    Root CA and user certificate issuance
   certificates.py          X.509 certificate verification
@@ -117,13 +118,16 @@ frontend/                 React 18 + Vite + Tailwind v3 SPA
 tests/
   test_app.py             Phase 1 baseline tests (6 tests)
   test_auth.py            Phase 2 authentication & security tests (22 tests)
-  test_crypto.py           Phase 3 cryptographic tests
-  test_ca_certs.py         Phase 4 CA and X.509 certificate tests
+  test_crypto.py           Phase 3 cryptographic tests (9 tests)
+  test_ca_certs.py         Phase 4 CA and X.509 certificate tests (5 tests)
+  test_wrap.py             Phase 5 RSA-OAEP key wrapping tests (7 tests)
+  test_signatures.py       Phase 5 RSA-PSS signature tests (8 tests)
 templates/                Phase 1 landing page and error pages
 static/                   Phase 1 styles and scripts
 scripts/                  Diagnostic and verification scripts
   init_ca.py              Root CA initialization
   create_admin.py         Admin account bootstrap
+  demo_wrap_sign.py       Phase 5 RSA-OAEP and RSA-PSS CLI demonstration
 ```
 
 ## Setup and Running
@@ -214,3 +218,11 @@ Run the complete backend suite with `python -m pytest -q`.
 - **Certificate Viewer:** Human-readable X.509 details, verification chain and PEM view.
 - **Admin CA Panel:** Root CA statistics, certificate inventory and immediate revocation.
 - **Bootstrap Scripts:** `scripts/init_ca.py` and `scripts/create_admin.py`.
+
+### Implemented in Phase 5
+
+- **RSA-OAEP Key Wrapping:** `crypto/rsa.py` implements `wrap_session_key` and `unwrap_session_key` for 32-byte AES-256 session keys using SHA-256 and MGF1-SHA-256. `UnwrapError` ensures generic error messages to prevent timing or padding-oracle information leaks.
+- **RSA-PSS Digital Signatures:** `crypto/signatures.py` provides `sign_data` and `verify_signature` using SHA-256 digest and 32-byte salt length (`PSS_SALT_LENGTH = 32`). Signature verification returns `False` on tampered payloads or invalid signatures without raising exceptions.
+- **SHA-256 Hashing:** `crypto/signatures.py` provides `sha256_hex` digest helper for computing 64-character hex strings.
+- **CLI Demo Script:** `scripts/demo_wrap_sign.py` demonstrates in-memory key generation, key wrapping, OAEP/PSS randomization checks, access control (recipient unwrap vs non-recipient rejection), and bit-flip tamper detection.
+- **Automated Tests:** `tests/test_wrap.py` (7 tests) and `tests/test_signatures.py` (8 tests) bringing total test suite to **66 passed unit tests**.
