@@ -9,12 +9,12 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 5 — RSA-OAEP Key Wrapping and RSA-PSS Digital Signatures
+- **Current Phase:** Phase 6 — Hybrid Secure Package (CLI Proof)
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4
-- **Current Blockers:** None for Phase 4. OpenSSL CLI verification was unavailable on the development machine; equivalent certificate inspection and cryptographic verification were completed using Python `cryptography`.
+- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5
+- **Current Blockers:** None
 - **Last Updated:** 2026-10-09
-- **Next Developer's Task:** Complete the remaining Phase 5 work: RSA-PSS digital signatures, SHA-256 hashing, and the CLI demonstration.
+- **Next Developer's Task:** Implement Phase 6 — Hybrid Secure Package (`crypto/package.py`, `scripts/e2e_cli.py`, `tests/test_package.py`).
 
 ---
 
@@ -380,19 +380,19 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 - **Objective:** Complete asymmetric cryptographic primitives in `crypto/rsa.py` (RSA-OAEP key wrapping/unwrapping) and construct `crypto/signatures.py` (RSA-PSS digital signatures and SHA-256 hashing).
 - **Assigned Developer / Phase Owner:** Developer 5 (Agent 5)
-- **Status:** `IN_PROGRESS` (RSA-OAEP key wrapping complete; RSA-PSS signatures pending)
+- **Status:** `COMPLETE — 2026-10-09`
 - **Dependencies:** Phase 3
 - **Files to Create / Modify:**
   - **Backend:**
-    - `backend/crypto/rsa.py` (extend with `wrap_session_key`, `unwrap_session_key`, `UnwrapError`)
-    - `backend/crypto/signatures.py` (`sign_data`, `verify_signature`, `sha256_hex`)
-    - `backend/scripts/demo_wrap_sign.py` (CLI demonstration script)
-    - `backend/tests/test_wrap.py`
-    - `backend/tests/test_signatures.py`
+    - `crypto/rsa.py` (extended with `wrap_session_key`, `unwrap_session_key`, `UnwrapError`)
+    - `crypto/signatures.py` (`sign_data`, `verify_signature`, `sha256_hex`)
+    - `scripts/demo_wrap_sign.py` (CLI demonstration script)
+    - `tests/test_wrap.py` (7 unit tests covering RSA-OAEP key wrapping and unwrapping)
+    - `tests/test_signatures.py` (8 unit tests covering RSA-PSS digital signatures and SHA-256 hashing)
 - **Main Implementation Tasks:**
   1. [x] Extend `crypto/rsa.py`: `wrap_session_key(public_key, session_key)` using `padding.OAEP(mgf=MGF1(SHA256), algorithm=SHA256, label=None)`. Validate `session_key` is strictly 32 bytes. Implement `unwrap_session_key(private_key, wrapped)` raising custom `UnwrapError` on decryption/padding failure.
-  2. [ ] Build `crypto/signatures.py`: `sign_data(private_key, data)` using `padding.PSS(mgf=MGF1(SHA256), salt_length=32)` with `SHA256`. Implement `verify_signature(public_key, data, signature) -> bool` catching `InvalidSignature` and returning boolean `True`/`False`. Implement `sha256_hex(data: bytes) -> str`.
-  3. [ ] Create CLI script `scripts/demo_wrap_sign.py` demonstrating wrapping 32-byte key (384 bytes wrapped length), randomized OAEP/PSS properties, verification success, and bit-flip detection.
+  2. [x] Build `crypto/signatures.py`: `sign_data(private_key, data)` using `padding.PSS(mgf=MGF1(SHA256), salt_length=32)` with `SHA256`. Implement `verify_signature(public_key, data, signature) -> bool` catching `InvalidSignature`/`ValueError` and returning boolean `True`/`False`. Implement `sha256_hex(data: bytes) -> str`.
+  3. [x] Create CLI script `scripts/demo_wrap_sign.py` demonstrating wrapping 32-byte key (384 bytes wrapped length), randomized OAEP/PSS properties, verification success, and bit-flip detection.
 - **APIs / Modules / Contracts Involved:**
   - `crypto/rsa.py`: `wrap_session_key(pub, key: bytes) -> bytes`, `unwrap_session_key(priv, wrapped: bytes) -> bytes`
   - `crypto/signatures.py`: `sign_data(priv, data: bytes) -> bytes`, `verify_signature(pub, data: bytes, sig: bytes) -> bool`, `sha256_hex(data: bytes) -> str`
@@ -401,15 +401,34 @@ Later phases depend on exact python function signatures and REST endpoints:
   - RSA-PSS with SHA-256 and salt length 32 (no legacy PKCS#1 v1.5 signatures).
   - Generic `UnwrapError` to prevent timing or padding-oracle side-channel information leaks.
 - **Tests Required:**
-  - Run `pytest backend/tests/test_wrap.py` (32-byte key wrapping, non-32 byte key rejection, wrong private key unwrap failure).
-  - Run `pytest backend/tests/test_signatures.py` (PSS sign/verify round trip, bit-flip signature rejection, public key mismatch rejection, empty data signing).
-  - Run `python backend/scripts/demo_wrap_sign.py`.
+  - Run `pytest tests/test_wrap.py` (32-byte key wrapping, non-32 byte key rejection, wrong private key unwrap failure).
+  - Run `pytest tests/test_signatures.py` (PSS sign/verify round trip, bit-flip signature rejection, public key mismatch rejection, empty data signing).
+  - Run `python scripts/demo_wrap_sign.py`.
 - **Acceptance Criteria:**
   - Wrapped AES key is exactly 384 bytes long for RSA-3072.
   - OAEP and PSS randomized properties confirmed (different outputs for identical inputs, both verifying).
   - Unit tests for wrapping and signatures pass 100%.
 - **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 5 upon phase completion.*
+  - **Implementation summary:** Completed Phase 5 asymmetric cryptographic primitives. Extended `crypto/rsa.py` with `wrap_session_key` and `unwrap_session_key` using RSA-OAEP with SHA-256 digest and MGF1-SHA-256 mask generation function. Built `crypto/signatures.py` providing `sign_data` and `verify_signature` using RSA-PSS with SHA-256 digest and 32-byte salt length, along with `sha256_hex` digest helper. Built comprehensive unit test suites `tests/test_wrap.py` (7 tests) and `tests/test_signatures.py` (8 tests), and CLI demonstration script `scripts/demo_wrap_sign.py`.
+  - **Files created / modified:**
+    - `crypto/signatures.py` (created: `sign_data`, `verify_signature`, `sha256_hex`, `PSS_SALT_LENGTH=32`)
+    - `crypto/rsa.py` (verified / updated: `wrap_session_key`, `unwrap_session_key`, `UnwrapError`)
+    - `scripts/demo_wrap_sign.py` (created: in-memory keygen, OAEP/PSS verification, bit-flip tamper detection, access control checks)
+    - `tests/test_wrap.py` (created: 7 tests covering happy path, invalid key size rejection, type safety, wrong key unwrap failure, corrupted ciphertext rejection, OAEP randomization)
+    - `tests/test_signatures.py` (created: 8 tests covering sign/verify happy path, bit-flip payload rejection, signature byte corruption, wrong key rejection, empty/1MB payload, PSS salt randomization, SHA-256 test vectors, type safety)
+  - **Verification results:**
+    - `python scripts/demo_wrap_sign.py` executed with exit code 0 (`ALL TESTS PASSED`).
+    - `python -m pytest -v` passed all 66 tests (6 Phase 1 + 22 Phase 2 + 18 Phase 3/4 + 7 Phase 5 wrap + 8 Phase 5 signatures + 5 Phase 4 certs).
+  - **Key architectural decisions:**
+    - RSA-3072 key size yields 384-byte (3072 bits) ciphertext/signature outputs.
+    - Max OAEP payload formula: `k - 2*hLen - 2 = 384 - 64 - 2 = 318 bytes` for RSA-3072 with SHA-256; 32-byte AES key easily fits.
+    - RSA-PSS probabilistic salt length is set to 32 bytes (`PSS_SALT_LENGTH = 32`).
+    - `verify_signature` catches `InvalidSignature` and `ValueError` to return boolean `False` without leaking exceptions or crashing callers.
+  - **Instructions for Phase 6 developer:**
+    1. Build `crypto/package.py` incorporating `canonical_header`, `build_package`, `verify_package`, `open_package`, and `format_security_box` per specification D6 and D7.
+    2. Import `sign_data`, `verify_signature`, `sha256_hex` from `crypto/signatures.py` and `wrap_session_key`, `unwrap_session_key`, `UnwrapError` from `crypto/rsa.py`.
+    3. Build `scripts/e2e_cli.py` to test the full hybrid package flow and the 9 attack vectors without requiring a web UI.
+    4. Build `tests/test_package.py` and verify all tests pass.
 
 ---
 
