@@ -18,11 +18,14 @@ from crypto.key_storage import (
     unprotect_private_key,
 )
 from crypto.rsa import (
+    UnwrapError,
     generate_rsa_keypair,
     load_private_key,
     load_public_key,
     private_key_to_pem,
     public_key_to_pem,
+    unwrap_session_key,
+    wrap_session_key,
 )
 
 _APP_SECRET = "phase-three-test-secret-with-at-least-32-bytes"
@@ -104,8 +107,18 @@ def test_aes_gcm_rejects_invalid_authentication(tamper):
         decrypt_bytes(key, nonce, encrypted, b"context")
 
 
-def test_rsa_key_generation_and_pem_serialization():
-    private_key, public_key = generate_rsa_keypair()
+@pytest.fixture(scope="module")
+def rsa_keypair():
+    return generate_rsa_keypair()
+
+
+@pytest.fixture(scope="module")
+def other_rsa_keypair():
+    return generate_rsa_keypair()
+
+
+def test_rsa_key_generation_and_pem_serialization(rsa_keypair):
+    private_key, public_key = rsa_keypair
     private_pem = private_key_to_pem(private_key)
     public_pem = public_key_to_pem(public_key)
     loaded_private = load_private_key(private_pem)
@@ -135,6 +148,83 @@ def test_rsa_key_generation_and_pem_serialization():
             label=None,
         ),
     ) == session_key
+
+
+def test_session_key_wrap_unwrap_uses_sha256_oaep_and_returns_bytes(rsa_keypair):
+    private_key, public_key = rsa_keypair
+    session_key = generate_session_key()
+    wrapped = wrap_session_key(public_key, session_key)
+
+    assert isinstance(wrapped, bytes)
+    assert len(wrapped) == private_key.key_size // 8
+    assert private_key.decrypt(
+        wrapped,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    ) == session_key
+
+    independently_wrapped = public_key.encrypt(
+        session_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    )
+    recovered = unwrap_session_key(private_key, independently_wrapped)
+    assert isinstance(recovered, bytes)
+    assert recovered == session_key
+
+
+def test_session_key_cannot_be_unwrapped_by_another_rsa_key(
+    rsa_keypair,
+    other_rsa_keypair,
+):
+    _, public_key = rsa_keypair
+    other_private_key, _ = other_rsa_keypair
+    wrapped = wrap_session_key(public_key, generate_session_key())
+
+    with pytest.raises(UnwrapError):
+        unwrap_session_key(other_private_key, wrapped)
+
+
+@pytest.mark.parametrize("tamper", ["modify", "empty", "wrong_length"])
+def test_unwrap_rejects_malformed_wrapped_session_keys(rsa_keypair, tamper):
+    private_key, public_key = rsa_keypair
+    wrapped = wrap_session_key(public_key, generate_session_key())
+
+    if tamper == "modify":
+        wrapped = bytes((wrapped[0] ^ 1,)) + wrapped[1:]
+    elif tamper == "empty":
+        wrapped = b""
+    else:
+        wrapped = wrapped[:-1]
+
+    with pytest.raises(UnwrapError):
+        unwrap_session_key(private_key, wrapped)
+
+
+@pytest.mark.parametrize("key", [b"", bytes(31), bytes(33)])
+def test_wrap_rejects_session_keys_that_are_not_32_bytes(rsa_keypair, key):
+    _, public_key = rsa_keypair
+    with pytest.raises(ValueError):
+        wrap_session_key(public_key, key)
+
+
+def test_wrap_and_unwrap_reject_invalid_input_types(rsa_keypair):
+    private_key, public_key = rsa_keypair
+
+    with pytest.raises(TypeError):
+        wrap_session_key(object(), bytes(32))
+    with pytest.raises(TypeError):
+        wrap_session_key(public_key, "not bytes")
+    with pytest.raises(TypeError):
+        unwrap_session_key(object(), b"wrapped")
+    with pytest.raises(TypeError):
+        unwrap_session_key(private_key, "not bytes")
 
 
 def test_private_key_protection_authenticates_secret_and_user():
