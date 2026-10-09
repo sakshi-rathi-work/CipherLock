@@ -9,12 +9,12 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 6 — Hybrid Secure Package (CLI Proof)
+- **Current Phase:** Phase 7 — Secure Upload, Storage and Sharing
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5
+- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6
 - **Current Blockers:** None
-- **Last Updated:** 2026-10-09
-- **Next Developer's Task:** Implement Phase 6 — Hybrid Secure Package (`crypto/package.py`, `scripts/e2e_cli.py`, `tests/test_package.py`).
+- **Last Updated:** 2026-10-10
+- **Next Developer's Task:** Implement Phase 7 — Secure upload, storage and sharing workflows.
 
 ---
 
@@ -814,15 +814,21 @@ See the Phase 3 section above. The important live repository contract is that `m
 Phase 4 is complete. Phase 5 can consume `users.public_key`, `users.certificate`, certificate serial numbers, and `verify_certificate()` without changing the Phase 4 certificate contracts. Phase 5 should implement RSA-OAEP session-key wrapping/unwrapping and RSA-PSS digital signatures.
 
 ### Phase 5 Handoff Notes
-*Status: In progress — RSA-OAEP key wrapping complete; RSA-PSS remains pending.*
+*Status: COMPLETE*
 
-- Implemented `wrap_session_key` and `unwrap_session_key` in `crypto/rsa.py` using RSA-OAEP with SHA-256, MGF1-SHA-256, and no label. Wrapping accepts only 32-byte AES keys; unwrap failures raise `UnwrapError`.
-- Added focused wrap/unwrap tests in `tests/test_crypto.py`, including direct OAEP interoperability, wrong-recipient rejection, malformed ciphertext, input validation, and bytes output.
-- Verification: `C:\python314\python.exe -m pytest tests/test_crypto.py -k "rsa or session_key or malformed_wrapped or invalid_input"` — 11 passed; `C:\python314\python.exe -m pytest` — 51 passed. The bare `pytest` launcher selects a separate Anaconda environment and cannot import its missing `Flask-WTF` dependency; use the configured Python interpreter commands above.
-- Continue Phase 5 with RSA-PSS signatures, SHA-256 hashing, and the CLI demonstration. Do not treat Phase 5 as complete until those tasks pass.
+- Implemented RSA-OAEP wrapping/unwrapping in `crypto/rsa.py`, requiring 32-byte AES keys and raising `UnwrapError` when unwrap fails.
+- Implemented RSA-PSS SHA-256 signatures with a 32-byte salt and the `sha256_hex` helper in `crypto/signatures.py`.
+- Added `scripts/demo_wrap_sign.py`, `tests/test_wrap.py`, and `tests/test_signatures.py`; verified as part of the Phase 6 full-suite run.
 
 ### Phase 6 Handoff Notes
-*Status: Pending*
+*Status: COMPLETE — 2026-10-10*
+
+- Added `crypto/package.py`: canonical sorted/compact JSON signing header, metadata AAD, AES-256-GCM encryption, RSA-OAEP session-key wrapping, ciphertext SHA-256 verification, RSA-PSS signature verification, fail-closed `open_package`, `SecurityReport`, `TamperError`, and the required CLI security box.
+- Added `scripts/e2e_cli.py`, which generates a temporary CA, users, certificates, and package under a temporary directory; it does not modify the configured local database, CA, or key files.
+- Added `tests/test_package.py`, covering a random 5 MiB round trip and all nine attack scenarios: ciphertext flip, filename change, receiver-ID change, other-user signature, rogue CA, expired certificate, revoked certificate, wrong recipient key, and attacker without a private key.
+- Verification: `python -m pytest -q -o addopts=''` — **76 passed**; `python scripts/e2e_cli.py` — **PASS, 9/9 attack cases matched**.
+- Run commands from the repository root: `python -m pytest tests/test_package.py -q` and `python scripts/e2e_cli.py`.
+- Phase 7 can now persist the package dictionary fields into the existing `files` table and must preserve the verify-before-decrypt ordering. `open_package` checks the signer trust/signature/integrity; the web workflow must additionally enforce that the authenticated user is the package's intended receiver.
 
 ### Phase 7 Handoff Notes
 *Status: Pending*

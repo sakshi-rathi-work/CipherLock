@@ -8,8 +8,8 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 5 — Implementation Complete**
-**Phase 6 — Hybrid Encrypted File Package (CLI Proof)**
+**Phase 6 — Implementation Complete**
+**Phase 7 — Secure Upload, Storage and Sharing**
 
 ### Implemented in Phase 2
 
@@ -51,7 +51,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 | 3 | RSA key-pair setup and AES-GCM primitives | `COMPLETE` |
 | 4 | Mini certificate authority and X.509 certificates | `COMPLETE` |
 | 5 | RSA-OAEP key wrapping and RSA-PSS signatures | `COMPLETE` |
-| 6 | Hybrid encrypted file package | Planned |
+| 6 | Hybrid encrypted file package | `COMPLETE` |
 | 7 | Secure file storage and sharing workflows | Planned |
 | 8 | Recipient verification and decryption | Planned |
 | 9 | Tampering, revocation, and security demonstrations | Planned |
@@ -98,6 +98,7 @@ crypto/
   key_storage.py           Protected private-key storage
   ca.py                    Root CA and user certificate issuance
   certificates.py          X.509 certificate verification
+  package.py               Hybrid package creation, verification, and opening
 models/
   user.py                 User CRUD, scrypt hashing, password validation
   activity.py             Security audit logging and activity queries
@@ -122,12 +123,14 @@ tests/
   test_ca_certs.py         Phase 4 CA and X.509 certificate tests (5 tests)
   test_wrap.py             Phase 5 RSA-OAEP key wrapping tests (7 tests)
   test_signatures.py       Phase 5 RSA-PSS signature tests (8 tests)
+  test_package.py          Phase 6 hybrid package and attack-case tests
 templates/                Phase 1 landing page and error pages
 static/                   Phase 1 styles and scripts
 scripts/                  Diagnostic and verification scripts
   init_ca.py              Root CA initialization
   create_admin.py         Admin account bootstrap
   demo_wrap_sign.py       Phase 5 RSA-OAEP and RSA-PSS CLI demonstration
+  e2e_cli.py               Phase 6 temporary end-to-end cryptography proof
 ```
 
 ## Setup and Running
@@ -201,6 +204,18 @@ python -m pytest tests/test_crypto.py -q
 
 Run the complete backend suite with `python -m pytest -q`.
 
+Run Phase 6 package tests and the independent CLI proof:
+
+```powershell
+python -m pytest tests\test_package.py -q
+python scripts\e2e_cli.py
+```
+
+```bash
+python -m pytest tests/test_package.py -q
+python scripts/e2e_cli.py
+```
+
 ## Security Notes
 
 - Passwords are never stored in plaintext; all password hashes use `scrypt` with random salts.
@@ -226,3 +241,21 @@ Run the complete backend suite with `python -m pytest -q`.
 - **SHA-256 Hashing:** `crypto/signatures.py` provides `sha256_hex` digest helper for computing 64-character hex strings.
 - **CLI Demo Script:** `scripts/demo_wrap_sign.py` demonstrates in-memory key generation, key wrapping, OAEP/PSS randomization checks, access control (recipient unwrap vs non-recipient rejection), and bit-flip tamper detection.
 - **Automated Tests:** `tests/test_wrap.py` (7 tests) and `tests/test_signatures.py` (8 tests) bringing total test suite to **66 passed unit tests**.
+
+### Implemented in Phase 6
+
+- **Hybrid package creation:** `crypto/package.py` encrypts plaintext with a fresh AES-256-GCM key, binds stable package metadata as AAD, wraps the key for the recipient with RSA-OAEP, hashes the ciphertext-plus-tag, and signs the canonical package header with RSA-PSS.
+- **Fail-closed verification and opening:** Certificate trust and revocation, ciphertext hash, and signature are checked before key unwrap or decryption. Untrusted/tampered packages raise `TamperError`; a wrong recipient key raises `UnwrapError`.
+- **CLI proof:** `scripts/e2e_cli.py` creates a temporary CA and demo users, round-trips a file, and validates all nine attack cases without touching the configured database or CA files.
+- **Automated tests:** `tests/test_package.py` covers the 5 MiB round trip and all nine attack categories.
+- **Verification:** `python -m pytest -q -o addopts=''` — **76 passed**; `python scripts/e2e_cli.py` — **9/9 attack cases passed**.
+
+Run the standalone end-to-end demonstration from the repository root:
+
+```powershell
+python scripts\e2e_cli.py
+```
+
+```bash
+python scripts/e2e_cli.py
+```
