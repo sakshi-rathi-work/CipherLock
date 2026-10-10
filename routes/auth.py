@@ -9,9 +9,11 @@ Endpoints:
 """
 from __future__ import annotations
 
+import logging
 import re
 from flask import Blueprint, g, jsonify, request, session
 
+from crypto.ca import CAConfigurationError
 from database.db import get_db
 from models.activity import list_recent_activity, log_activity
 from models.lockout import is_locked, record_failure, reset_key
@@ -104,6 +106,15 @@ def register():
     except DuplicateEmailError:
         db.rollback()
         return jsonify({"error": "An account with this email already exists"}), 409
+    except (CAConfigurationError, FileNotFoundError):
+        # Not a user mistake: this machine's Root CA is missing or its key cannot be
+        # unlocked with CIPHERLOCK_CA_PASSPHRASE. Say so clearly instead of a vague 500.
+        db.rollback()
+        logging.getLogger(__name__).exception("Registration blocked: Root CA unavailable")
+        return jsonify({
+            "error": "Server setup incomplete: the Certificate Authority is not ready. "
+                     "The administrator must run: python scripts/setup_dev.py"
+        }), 503
     except Exception:
         db.rollback()
         return jsonify({"error": "An unexpected error occurred."}), 500
