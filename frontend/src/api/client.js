@@ -75,6 +75,17 @@ export const api = axios.create({
 
 // Request interceptor: attach CSRF token to mutating requests
 api.interceptors.request.use(async (config) => {
+  // Multipart uploads: the instance default is "application/json", which would make
+  // Axios serialise a FormData body to JSON. Remove it so the browser generates
+  // "multipart/form-data; boundary=..." itself. The CSRF header below still applies.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    if (typeof config.headers?.delete === "function") {
+      config.headers.delete("Content-Type");
+    } else if (config.headers) {
+      delete config.headers["Content-Type"];
+    }
+  }
+
   const method = config.method?.toUpperCase();
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
     try {

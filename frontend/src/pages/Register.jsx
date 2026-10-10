@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput";
 import Spinner from "../components/Spinner";
+import AuthShell from "../components/AuthShell";
 import { Check, X, ShieldCheck, AlertCircle } from "lucide-react";
 
 export default function Register() {
@@ -94,268 +95,191 @@ export default function Register() {
     }
   };
 
+  const nameInvalid = Boolean(serverErrors.name || (touched.name && !formData.name.trim()));
+  const emailInvalid = Boolean(serverErrors.email || (touched.email && !formData.email.trim()));
+
   return (
-    <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-navy text-lime mb-3 shadow-md">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <p className="eyebrow text-lime-dark mb-1">SECURE ACCESS</p>
-          <h1 className="text-2.5xl font-bold tracking-tight text-ink">
-            Create your account
-          </h1>
-          <p className="text-sm text-ink-muted mt-1.5">
-            Join CipherLock for secure, recipient-verified file sharing.
-          </p>
+    <AuthShell>
+      {/* Header */}
+      <div className="mb-8">
+        <span className="icon-tile w-12 h-12 mb-5">
+          <ShieldCheck className="w-6 h-6" aria-hidden="true" />
+        </span>
+        <p className="eyebrow text-lime-dark mb-1.5">Secure access</p>
+        <h1 className="text-2.5xl sm:text-3xl font-extrabold tracking-tight text-ink">
+          Create your account
+        </h1>
+        <p className="text-sm text-ink-muted mt-2">
+          Join CipherLock for secure, recipient-verified file sharing.
+        </p>
+      </div>
+
+      {globalError && (
+        <div role="alert" aria-live="assertive" className="alert alert-error mb-6">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-600" />
+          <div className="flex-1 font-medium">{globalError}</div>
         </div>
+      )}
 
-        {/* Global Error Banner */}
-        {globalError && (
-          <div
-            role="alert"
-            aria-live="assertive"
-            className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start space-x-2.5"
-          >
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-600" />
-            <div className="flex-1 font-medium">{globalError}</div>
+      <div className="surface p-6 sm:p-8">
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          {/* Full Name */}
+          <div>
+            <label htmlFor="register-name" className="field-label">Full Name</label>
+            <input
+              id="register-name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              required
+              disabled={isSubmitting}
+              value={formData.name}
+              onChange={handleChange}
+              onBlur={() => handleBlur("name")}
+              placeholder="e.g. Siddharth Verma"
+              aria-invalid={nameInvalid}
+              aria-describedby={serverErrors.name ? "name-error" : undefined}
+              className={`form-input ${nameInvalid ? "is-invalid" : ""}`}
+            />
+            {serverErrors.name && (
+              <p id="name-error" className="text-xs text-red-600 mt-1 font-medium">{serverErrors.name}</p>
+            )}
           </div>
-        )}
 
-        {/* Card */}
-        <div className="bg-white rounded-xl border border-line p-6 sm:p-8 shadow-card">
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            {/* Full Name */}
-            <div>
-              <label
-                htmlFor="register-name"
-                className="block text-xs font-semibold uppercase tracking-wider text-ink mb-1.5"
-              >
-                Full Name
-              </label>
-              <input
-                id="register-name"
-                name="name"
-                type="text"
-                autoComplete="name"
-                required
-                disabled={isSubmitting}
-                value={formData.name}
-                onChange={handleChange}
-                onBlur={() => handleBlur("name")}
-                placeholder="e.g. Siddharth Verma"
-                aria-invalid={Boolean(serverErrors.name || (touched.name && !formData.name.trim()))}
-                aria-describedby={serverErrors.name ? "name-error" : undefined}
-                className={`form-input ${
-                  serverErrors.name || (touched.name && !formData.name.trim())
-                    ? "is-invalid"
-                    : ""
-                }`}
-              />
-              {serverErrors.name && (
-                <p id="name-error" className="text-xs text-red-600 mt-1 font-medium">
-                  {serverErrors.name}
-                </p>
-              )}
-            </div>
+          {/* Email */}
+          <div>
+            <label htmlFor="register-email" className="field-label">Email Address</label>
+            <input
+              id="register-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              disabled={isSubmitting}
+              value={formData.email}
+              onChange={handleChange}
+              onBlur={() => handleBlur("email")}
+              placeholder="name@example.com"
+              aria-invalid={emailInvalid}
+              aria-describedby={serverErrors.email ? "email-error" : undefined}
+              className={`form-input ${emailInvalid ? "is-invalid" : ""}`}
+            />
+            {serverErrors.email && (
+              <p id="email-error" className="text-xs text-red-600 mt-1 font-medium">{serverErrors.email}</p>
+            )}
+          </div>
 
-            {/* Email Address */}
-            <div>
-              <label
-                htmlFor="register-email"
-                className="block text-xs font-semibold uppercase tracking-wider text-ink mb-1.5"
-              >
-                Email Address
-              </label>
-              <input
-                id="register-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                disabled={isSubmitting}
-                value={formData.email}
-                onChange={handleChange}
-                onBlur={() => handleBlur("email")}
-                placeholder="name@example.com"
-                aria-invalid={Boolean(serverErrors.email || (touched.email && !formData.email.trim()))}
-                aria-describedby={serverErrors.email ? "email-error" : undefined}
-                className={`form-input ${
-                  serverErrors.email || (touched.email && !formData.email.trim())
-                    ? "is-invalid"
-                    : ""
-                }`}
-              />
-              {serverErrors.email && (
-                <p id="email-error" className="text-xs text-red-600 mt-1 font-medium">
-                  {serverErrors.email}
-                </p>
-              )}
-            </div>
+          {/* Password */}
+          <div>
+            <label htmlFor="register-password" className="field-label">Password</label>
+            <PasswordInput
+              id="register-password"
+              name="password"
+              autoComplete="new-password"
+              required
+              disabled={isSubmitting}
+              value={formData.password}
+              onChange={handleChange}
+              onBlur={() => handleBlur("password")}
+              hasError={Boolean(serverErrors.password || (touched.password && rulesPassed < 4))}
+              ariaDescribedBy="password-rules"
+            />
+            {serverErrors.password && (
+              <p className="text-xs text-red-600 mt-1 font-medium">{serverErrors.password}</p>
+            )}
 
-            {/* Password */}
-            <div>
-              <label
-                htmlFor="register-password"
-                className="block text-xs font-semibold uppercase tracking-wider text-ink mb-1.5"
-              >
-                Password
-              </label>
-              <PasswordInput
-                id="register-password"
-                name="password"
-                autoComplete="new-password"
-                required
-                disabled={isSubmitting}
-                value={formData.password}
-                onChange={handleChange}
-                onBlur={() => handleBlur("password")}
-                hasError={Boolean(serverErrors.password || (touched.password && rulesPassed < 4))}
-                ariaDescribedBy="password-rules"
-              />
-              {serverErrors.password && (
-                <p className="text-xs text-red-600 mt-1 font-medium">
-                  {serverErrors.password}
-                </p>
-              )}
-
-              {/* Password Strength Indicator */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs text-ink-muted mb-1 font-mono">
-                  <span>STRENGTH</span>
-                  <span>{rulesPassed}/4 REQUIREMENTS</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 h-1.5">
-                  {[1, 2, 3, 4].map((step) => (
-                    <div
-                      key={step}
-                      className={`h-full rounded-full transition-colors ${
-                        rulesPassed >= step
-                          ? step <= 2
-                            ? "bg-amber-400"
-                            : "bg-lime-dark"
-                          : "bg-line"
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                {/* Password Rules Checklist */}
-                <div id="password-rules" className="mt-3 space-y-1 text-xs text-ink-muted">
-                  <div className="flex items-center space-x-1.5">
-                    {rules.length ? (
-                      <Check className="w-3.5 h-3.5 text-lime-dark" />
+            <div className="mt-3 rounded-lg bg-paper border border-line p-3">
+              <div className="flex items-center justify-between text-[10.5px] text-ink-muted mb-1.5 font-mono uppercase tracking-wider">
+                <span>Strength</span>
+                <span>{rulesPassed}/4 requirements</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                {[1, 2, 3, 4].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-full rounded-full transition-colors ${
+                      rulesPassed >= step
+                        ? step <= 2
+                          ? "bg-amber-400"
+                          : "bg-emerald-500"
+                        : "bg-line-strong/60"
+                    }`}
+                  />
+                ))}
+              </div>
+              <div id="password-rules" className="mt-3 space-y-1 text-xs text-ink-muted">
+                {[
+                  [rules.length, "10–128 characters long"],
+                  [rules.upper, "At least one uppercase letter (A–Z)"],
+                  [rules.lower, "At least one lowercase letter (a–z)"],
+                  [rules.digit, "At least one digit (0–9)"],
+                ].map(([ok, label]) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    {ok ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
                     ) : (
-                      <X className="w-3.5 h-3.5 text-ink-muted opacity-60" />
+                      <X className="w-3.5 h-3.5 text-slate-300" />
                     )}
-                    <span className={rules.length ? "text-ink font-medium" : ""}>
-                      10–128 characters long
-                    </span>
+                    <span className={ok ? "text-ink font-medium" : ""}>{label}</span>
                   </div>
-                  <div className="flex items-center space-x-1.5">
-                    {rules.upper ? (
-                      <Check className="w-3.5 h-3.5 text-lime-dark" />
-                    ) : (
-                      <X className="w-3.5 h-3.5 text-ink-muted opacity-60" />
-                    )}
-                    <span className={rules.upper ? "text-ink font-medium" : ""}>
-                      At least one uppercase letter (A–Z)
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-1.5">
-                    {rules.lower ? (
-                      <Check className="w-3.5 h-3.5 text-lime-dark" />
-                    ) : (
-                      <X className="w-3.5 h-3.5 text-ink-muted opacity-60" />
-                    )}
-                    <span className={rules.lower ? "text-ink font-medium" : ""}>
-                      At least one lowercase letter (a–z)
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-1.5">
-                    {rules.digit ? (
-                      <Check className="w-3.5 h-3.5 text-lime-dark" />
-                    ) : (
-                      <X className="w-3.5 h-3.5 text-ink-muted opacity-60" />
-                    )}
-                    <span className={rules.digit ? "text-ink font-medium" : ""}>
-                      At least one digit (0–9)
-                    </span>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label
-                htmlFor="register-confirm-password"
-                className="block text-xs font-semibold uppercase tracking-wider text-ink mb-1.5"
-              >
-                Confirm Password
-              </label>
-              <PasswordInput
-                id="register-confirm-password"
-                name="confirmPassword"
-                autoComplete="new-password"
-                required
-                disabled={isSubmitting}
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                onBlur={() => handleBlur("confirmPassword")}
-                hasError={Boolean(
-                  touched.confirmPassword &&
-                  formData.confirmPassword &&
-                  !passwordsMatch
-                )}
-                ariaDescribedBy="confirm-password-feedback"
-              />
-              {touched.confirmPassword && formData.confirmPassword && (
-                <div id="confirm-password-feedback" className="mt-1.5 text-xs flex items-center space-x-1">
-                  {passwordsMatch ? (
-                    <span className="text-emerald-700 flex items-center space-x-1 font-medium">
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Passwords match</span>
-                    </span>
-                  ) : (
-                    <span className="text-red-600 flex items-center space-x-1 font-medium">
-                      <X className="w-3.5 h-3.5" />
-                      <span>Passwords do not match</span>
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isSubmitting || rulesPassed < 4 || (formData.confirmPassword && !passwordsMatch)}
-                className="w-full btn-lime py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center space-x-2 shadow-sm"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Spinner size="sm" className="border-navy border-t-transparent" />
-                    <span>Creating account...</span>
-                  </>
-                ) : (
-                  <span>Register Account</span>
-                )}
-              </button>
-            </div>
-          </form>
-
-          {/* Card Footer */}
-          <div className="mt-6 pt-5 border-t border-line text-center text-xs text-ink-muted">
-            Already have an account?{" "}
-            <Link to="/login" className="font-semibold text-navy hover:underline">
-              Sign in here
-            </Link>
           </div>
+
+          {/* Confirm Password */}
+          <div>
+            <label htmlFor="register-confirm-password" className="field-label">Confirm Password</label>
+            <PasswordInput
+              id="register-confirm-password"
+              name="confirmPassword"
+              autoComplete="new-password"
+              required
+              disabled={isSubmitting}
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              onBlur={() => handleBlur("confirmPassword")}
+              hasError={Boolean(touched.confirmPassword && formData.confirmPassword && !passwordsMatch)}
+              ariaDescribedBy="confirm-password-feedback"
+            />
+            {touched.confirmPassword && formData.confirmPassword && (
+              <div id="confirm-password-feedback" className="mt-1.5 text-xs flex items-center gap-1">
+                {passwordsMatch ? (
+                  <span className="text-emerald-700 flex items-center gap-1 font-medium">
+                    <Check className="w-3.5 h-3.5" /> Passwords match
+                  </span>
+                ) : (
+                  <span className="text-red-600 flex items-center gap-1 font-medium">
+                    <X className="w-3.5 h-3.5" /> Passwords do not match
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting || rulesPassed < 4 || (formData.confirmPassword && !passwordsMatch)}
+            className="w-full btn-lime py-3 px-4 rounded-lg text-sm"
+          >
+            {isSubmitting ? (
+              <>
+                <Spinner size="sm" className="border-navy border-t-transparent" />
+                <span>Creating account...</span>
+              </>
+            ) : (
+              <span>Register Account</span>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 pt-5 border-t border-line text-center text-sm text-ink-muted">
+          Already have an account?{" "}
+          <Link to="/login" className="font-semibold text-navy hover:text-lime-dark hover:underline">
+            Sign in here
+          </Link>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

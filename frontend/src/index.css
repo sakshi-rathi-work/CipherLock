@@ -3,76 +3,156 @@
 @tailwind utilities;
 
 :root {
-  --navy: #0c1d31;
-  --navy-2: #132b45;
-  --ink: #17283c;
-  --muted: #738194;
+  --navy: #0b1b2e;
+  --navy-2: #12283f;
+  --ink: #13243a;
+  --muted: #64748b;
   --lime: #c4f16e;
-  --lime-hover: #d2fa87;
-  --paper: #f5f7f8;
-  --line: #dce3e9;
+  --lime-hover: #d4f98c;
+  --paper: #f4f6f9;
+  --line: #e2e8f0;
 }
 
-/* Accessible focus visible ring */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(1100px 500px at 100% -10%, rgba(196, 241, 110, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(18, 40, 63, 0.07), transparent 60%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* Accessible focus ring */
 *:focus-visible {
-  outline: 2px solid var(--lime);
+  outline: 2px solid #7fae2e;
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
-/* Custom Eyebrow styling from Phase 1 */
-.eyebrow {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 1.25px;
-  text-transform: uppercase;
+@layer components {
+  /* ---------- Typography helpers ---------- */
+  .eyebrow {
+    @apply font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em];
+  }
+
+  .page {
+    @apply flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-up;
+  }
+
+  .page-title {
+    @apply text-3xl font-extrabold tracking-tight text-ink flex items-center gap-3;
+  }
+
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-wider text-ink/80 mb-1.5;
+  }
+
+  .meta-label {
+    @apply block font-mono text-[10.5px] uppercase tracking-wider text-ink-muted;
+  }
+
+  /* ---------- Surfaces ---------- */
+  .surface {
+    @apply bg-white border border-line rounded-2xl shadow-card;
+  }
+
+  .surface-hover {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover hover:border-line-strong;
+  }
+
+  .icon-tile {
+    @apply inline-flex items-center justify-center rounded-xl text-lime shadow-sm flex-shrink-0;
+    background: linear-gradient(145deg, #16314d 0%, #0b1b2e 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 10px -4px rgba(11, 27, 46, 0.5);
+  }
+
+  .hero-surface {
+    @apply relative overflow-hidden text-white rounded-2xl shadow-panel;
+    background:
+      radial-gradient(600px 260px at 90% -20%, rgba(196, 241, 110, 0.22), transparent 65%),
+      radial-gradient(500px 300px at 0% 120%, rgba(60, 120, 190, 0.28), transparent 60%),
+      linear-gradient(135deg, #0f2740 0%, #0b1b2e 60%, #08141f 100%);
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn-lime {
+    @apply inline-flex items-center justify-center gap-2 font-semibold text-[#0b1b2e] transition-all duration-200;
+    background: linear-gradient(180deg, #d4f98c 0%, #bdea5c 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 6px 16px -6px rgba(140, 190, 50, 0.55);
+  }
+  .btn-lime:hover:not(:disabled) {
+    background: linear-gradient(180deg, #def9a0 0%, #c8f06c 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 10px 22px -6px rgba(140, 190, 50, 0.7);
+    transform: translateY(-1px);
+  }
+  .btn-lime:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .btn-lime:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-paper hover:border-ink-muted/40 disabled:opacity-60;
+  }
+
+  .btn-dark {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-surface;
+  }
+
+  /* ---------- Forms ---------- */
+  .form-input {
+    @apply w-full rounded-lg border border-line-strong bg-white px-3.5 py-2.5 text-[0.925rem] text-ink placeholder:text-slate-400 transition duration-150;
+  }
+  .form-input:hover {
+    border-color: #94a3b8;
+  }
+  .form-input:focus {
+    @apply outline-none;
+    border-color: #4f7a1c;
+    box-shadow: 0 0 0 4px rgba(127, 174, 46, 0.18);
+  }
+  .form-input:disabled {
+    @apply bg-slate-50 text-slate-400 cursor-not-allowed;
+  }
+  .form-input.is-invalid {
+    @apply border-red-500 bg-red-50/60;
+  }
+  .form-input.is-invalid:focus {
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15);
+  }
+
+  /* ---------- Pills / badges ---------- */
+  .pill {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold;
+  }
+  .pill-ok { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
+  .pill-warn { @apply bg-amber-50 text-amber-800 border-amber-200; }
+  .pill-bad { @apply bg-red-50 text-red-700 border-red-200; }
+  .pill-neutral { @apply bg-slate-100 text-slate-700 border-slate-200; }
+
+  /* ---------- Alerts ---------- */
+  .alert {
+    @apply flex items-start gap-3 rounded-xl border p-4 text-sm;
+  }
+  .alert-error { @apply bg-red-50 border-red-200 text-red-700; }
+  .alert-success { @apply bg-emerald-50 border-emerald-200 text-emerald-800; }
+  .alert-warn { @apply bg-amber-50 border-amber-300 text-amber-900; }
+  .alert-info { @apply bg-white border-line text-ink-muted; }
 }
 
-/* Lime button matching Phase 1 */
-.btn-lime {
-  background-color: var(--lime);
-  color: #132237;
-  font-weight: 650;
-  transition: all 0.2s ease;
-}
-
-.btn-lime:hover:not(:disabled) {
-  background-color: var(--lime-hover);
-  box-shadow: 0 0 15px rgba(196, 241, 110, 0.4);
-}
-
-.btn-lime:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Form input styling */
-.form-input {
-  width: 100%;
-  border-radius: 0.5rem;
-  border: 1px solid var(--line);
-  background-color: #ffffff;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.925rem;
-  color: var(--ink);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.form-input:hover {
-  border-color: #b0c0ce;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #132b45;
-  box-shadow: 0 0 0 3px rgba(19, 43, 69, 0.15);
-}
-
-.form-input.is-invalid {
-  border-color: #dc2626;
-  background-color: #fef2f2;
-}
-
-.form-input.is-invalid:focus {
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-fade-up, .animate-fade-in { animation: none; }
+  * { transition-duration: 0.01ms !important; }
 }

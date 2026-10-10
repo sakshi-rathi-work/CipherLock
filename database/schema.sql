@@ -25,7 +25,12 @@ CREATE TABLE IF NOT EXISTS files (
     sender_certificate BLOB,
     ciphertext_sha256 TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Phase 7 additive columns (existing databases receive them via
+    -- database.db.migrate_files_table; keep both definitions in sync).
+    package_version INTEGER NOT NULL DEFAULT 1,
+    sender_cert_serial TEXT,
+    client_request_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS certificates (
@@ -49,6 +54,9 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE INDEX IF NOT EXISTS idx_files_sender_id ON files(sender_id);
 CREATE INDEX IF NOT EXISTS idx_files_receiver_id ON files(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_files_status ON files(status);
+-- Phase 7: stable newest-first listing for the sent and received views.
+CREATE INDEX IF NOT EXISTS idx_files_sender_created ON files(sender_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_files_receiver_created ON files(receiver_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_certificates_user_id ON certificates(user_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_status ON certificates(status);
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_created ON activity_log(user_id, created_at);

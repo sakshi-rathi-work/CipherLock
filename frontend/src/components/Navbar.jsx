@@ -1,7 +1,19 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Menu, X, LogOut, LayoutDashboard, User } from "lucide-react";
+import {
+  Menu,
+  X,
+  LogOut,
+  LayoutDashboard,
+  Send,
+  Inbox,
+  UploadCloud,
+  Award,
+  ShieldCheck,
+} from "lucide-react";
+
+const LANDING_URL = "http://127.0.0.1:5000/";
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -13,181 +25,155 @@ export default function Navbar() {
     navigate("/login", { state: { notice: "You have been signed out." } });
   };
 
+  const links = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/send", label: "Send", icon: UploadCloud },
+    { to: "/sent", label: "Sent", icon: Send },
+    { to: "/received", label: "Received", icon: Inbox },
+    { to: "/directory", label: "Certificates", icon: Award },
+    ...(user?.is_admin ? [{ to: "/admin", label: "CA Admin", icon: ShieldCheck }] : []),
+  ];
+
+  const desktopLink = ({ isActive }) =>
+    `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+      isActive
+        ? "bg-white/10 text-white"
+        : "text-slate-300 hover:text-white hover:bg-white/5"
+    }`;
+
+  const mobileLink = ({ isActive }) =>
+    `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium ${
+      isActive ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"
+    }`;
+
+  const initials = (user?.name || "U")
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
-    <nav className="bg-navy border-b border-[#1b344d] text-white min-h-[72px] flex items-center sticky top-0 z-50 shadow-nav">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center justify-between">
+    <nav className="bg-navy/95 backdrop-blur-md border-b border-white/10 text-white h-[68px] flex items-center sticky top-0 z-50 shadow-nav">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-6">
         {/* Brand */}
-        <div className="flex items-center space-x-3">
-          <a
-            href="http://127.0.0.1:5000/"
-            className="flex items-center space-x-2 font-bold text-xl tracking-tight hover:opacity-90 transition-opacity"
+        <a
+          href={LANDING_URL}
+          className="group flex items-center gap-2.5 font-bold text-lg tracking-tight"
+        >
+          <span
+            className="w-8 h-8 rounded-[10px] inline-flex items-center justify-center font-extrabold text-[15px] text-navy shadow-lime transition-transform group-hover:scale-105"
+            style={{ background: "linear-gradient(145deg,#d4f98c,#a6d94a)" }}
           >
-            <span className="w-[29px] h-[29px] bg-lime text-navy rounded-lg inline-flex items-center justify-center font-extrabold text-base shadow-sm">
-              C
-            </span>
-            <span className="text-white">
-              CipherLock<span className="text-lime">.</span>
-            </span>
-          </a>
-        </div>
+            C
+          </span>
+          <span className="text-white">
+            CipherLock<span className="text-lime">.</span>
+          </span>
+        </a>
 
-        {/* Desktop Navigation Links */}
-        <div className="hidden md:flex items-center space-x-6 text-sm font-medium">
-          <a
-            href="http://127.0.0.1:5000/"
-            className="text-[#ced9df] hover:text-white transition-colors"
-          >
-            Home
-          </a>
-          <a
-            href="http://127.0.0.1:5000/#security"
-            className="text-[#ced9df] hover:text-white transition-colors"
-          >
-            Security goals
-          </a>
+        {/* Desktop navigation */}
+        <div className="hidden lg:flex items-center flex-1 justify-between">
+          <div className="flex items-center gap-1 ml-6">
+            {isAuthenticated ? (
+              links.map(({ to, label, icon: Icon }) => (
+                <NavLink key={to} to={to} className={desktopLink}>
+                  <Icon className="w-4 h-4 opacity-80" aria-hidden="true" />
+                  {label}
+                </NavLink>
+              ))
+            ) : (
+              <>
+                <a href={LANDING_URL} className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5">
+                  Home
+                </a>
+                <a href={`${LANDING_URL}#security`} className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5">
+                  Security goals
+                </a>
+              </>
+            )}
+          </div>
 
-          {isAuthenticated ? (
-            <div className="flex items-center space-x-4 pl-4 border-l border-[#24425f]">
-              <Link
-                to="/directory"
-                className="text-[#ced9df] hover:text-white transition-colors"
-              >
-                Certificates
-              </Link>
-              {user?.is_admin && (
-                <Link
-                  to="/admin"
-                  className="text-[#ced9df] hover:text-white transition-colors"
-                >
-                  CA Admin
-                </Link>
-              )}
-              <Link
-                to="/dashboard"
-                className="flex items-center space-x-1.5 text-[#ced9df] hover:text-white transition-colors"
-              >
-                <LayoutDashboard className="w-4 h-4 text-lime" />
-                <span>Dashboard</span>
-              </Link>
-              <span className="flex items-center space-x-1 text-xs text-[#9dafbc] bg-navy-surface px-2.5 py-1 rounded-full border border-navy-border">
-                <User className="w-3 h-3" />
-                <span>{user?.name}</span>
-              </span>
-              <button
-                onClick={handleLogout}
-                className="flex items-center space-x-1 text-[#aebdca] hover:text-white transition-colors p-1"
-                title="Sign out"
-                aria-label="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="text-xs">Sign out</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-4 pl-4 border-l border-[#24425f]">
-              <Link
-                to="/login"
-                className="text-[#ced9df] hover:text-white transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/register"
-                className="btn-lime px-3.5 py-1.5 rounded-md text-sm font-semibold inline-block"
-              >
-                Register
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {/* Mobile Hamburger Button */}
-        <div className="flex md:hidden">
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-md text-[#aebdca] hover:text-white hover:bg-navy-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-lime"
-            aria-label="Toggle navigation menu"
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden absolute top-[72px] left-0 w-full bg-navy-surface border-b border-[#24425f] px-4 pt-3 pb-5 space-y-3 shadow-panel">
-          <a
-            href="http://127.0.0.1:5000/"
-            className="block text-[#ced9df] hover:text-white py-1"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Home
-          </a>
-          <a
-            href="http://127.0.0.1:5000/#security"
-            className="block text-[#ced9df] hover:text-white py-1"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Security goals
-          </a>
-          {isAuthenticated ? (
-            <>
-              <div className="pt-2 border-t border-[#24425f]">
-                <div className="text-xs text-[#9dafbc] mb-2">Signed in as {user?.name}</div>
-                <Link
-                  to="/directory"
-                  className="block text-[#ced9df] hover:text-white py-1"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Certificates
-                </Link>
-                {user?.is_admin && (
-                  <Link
-                    to="/admin"
-                    className="block text-[#ced9df] hover:text-white py-1"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    CA Admin
-                  </Link>
-                )}
-                <Link
-                  to="/dashboard"
-                  className="block text-[#ced9df] hover:text-white py-1"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
+          <div className="flex items-center gap-3">
+            {isAuthenticated ? (
+              <>
+                <div className="hidden xl:flex items-center gap-2.5 pl-3 pr-1 py-1 rounded-full bg-white/5 border border-white/10">
+                  <span className="text-xs text-slate-300 max-w-[140px] truncate">{user?.name}</span>
+                  <span className="w-7 h-7 rounded-full bg-lime text-navy text-[11px] font-bold inline-flex items-center justify-center">
+                    {initials}
+                  </span>
+                </div>
                 <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleLogout();
-                  }}
-                  className="w-full text-left text-red-400 hover:text-red-300 py-1 flex items-center space-x-1"
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                  title="Sign out"
+                  aria-label="Sign out"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-4 h-4" aria-hidden="true" />
                   <span>Sign out</span>
                 </button>
-              </div>
-            </>
-          ) : (
-            <div className="pt-2 border-t border-[#24425f] flex flex-col space-y-2">
-              <Link
-                to="/login"
-                className="block text-[#ced9df] hover:text-white py-1"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/register"
-                className="btn-lime text-center py-2 rounded-md font-semibold"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Register
-              </Link>
-            </div>
-          )}
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5">
+                  Sign in
+                </Link>
+                <Link to="/register" className="btn-lime px-4 py-2 rounded-lg text-sm">
+                  Create account
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="lg:hidden p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10"
+          aria-label="Toggle navigation menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden absolute top-[68px] left-0 w-full bg-navy border-b border-white/10 px-4 pt-3 pb-5 shadow-panel animate-fade-in">
+          <div className="space-y-1">
+            {isAuthenticated ? (
+              <>
+                <div className="px-3 pb-2 text-xs text-slate-400">Signed in as {user?.name}</div>
+                {links.map(({ to, label, icon: Icon }) => (
+                  <NavLink key={to} to={to} className={mobileLink} onClick={() => setMobileMenuOpen(false)}>
+                    <Icon className="w-4 h-4" aria-hidden="true" />
+                    {label}
+                  </NavLink>
+                ))}
+                <div className="pt-2 mt-2 border-t border-white/10">
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-300 hover:bg-white/5"
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    Sign out
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <a href={LANDING_URL} className={mobileLink({ isActive: false })} onClick={() => setMobileMenuOpen(false)}>Home</a>
+                <a href={`${LANDING_URL}#security`} className={mobileLink({ isActive: false })} onClick={() => setMobileMenuOpen(false)}>Security goals</a>
+                <Link to="/login" className={mobileLink({ isActive: false })} onClick={() => setMobileMenuOpen(false)}>Sign in</Link>
+                <Link to="/register" className="btn-lime text-center py-2.5 rounded-lg text-sm mt-2 flex" onClick={() => setMobileMenuOpen(false)}>
+                  Create account
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       )}
     </nav>

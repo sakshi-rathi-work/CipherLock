@@ -140,6 +140,23 @@ def get_user_by_id(user_id: int) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def get_protected_private_key(user_id: int) -> bytes | None:
+    """Return the user's protected private-key envelope (Phase 3 format), or None.
+
+    INTERNAL SERVER USE ONLY: the envelope must be passed straight to
+    ``crypto.key_storage.unprotect_private_key`` and never returned to clients,
+    logged, or placed in a session. ``get_user_by_id`` deliberately stays unchanged.
+    """
+    db = get_db()
+    row = db.execute(
+        "SELECT encrypted_private_key FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None or row["encrypted_private_key"] is None:
+        return None
+    return bytes(row["encrypted_private_key"])
+
+
 def list_other_users(current_user_id: int) -> list[sqlite3.Row]:
     """Return active users other than current_user_id, with safe columns only (id, name, email)."""
     db = get_db()

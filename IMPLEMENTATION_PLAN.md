@@ -9,12 +9,13 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 7 — Secure Upload, Storage and Sharing
+- **Current Phase:** Phase 8 — Receiver Workflow, Security Status and Decryption (next to implement)
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6
+- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7
 - **Current Blockers:** None
 - **Last Updated:** 2026-10-10
-- **Next Developer's Task:** Implement Phase 7 — Secure upload, storage and sharing workflows.
+- **Last Verified Test State:** `python -m pytest` → 154 passed; `python scripts/e2e_cli.py` → 9/9 PASS; `cd frontend && npm run build` → success
+- **Next Developer's Task:** Implement Phase 8 — read **`Phase 7 → Phase 8 Handoff`** (before the Developer Handoff Tracking Ledger) first.
 
 ---
 
@@ -108,7 +109,7 @@ Later phases depend on exact python function signatures and REST endpoints:
 ### Database Schema (SQLite 3 — `backend/database/cipherlock.db`)
 
 1. **`users`**: `id` (INTEGER PK AUTOINCREMENT), `name` (TEXT), `email` (TEXT UNIQUE), `password_hash` (TEXT), `public_key` (TEXT PEM), `encrypted_private_key` (TEXT PEM), `certificate` (TEXT PEM), `is_admin` (INTEGER), `is_active` (INTEGER), `created_at` (TIMESTAMP).
-2. **`files`**: `id` (INTEGER PK AUTOINCREMENT), `sender_id` (INTEGER FK users), `receiver_id` (INTEGER FK users), `original_filename` (TEXT), `encrypted_filename` (TEXT UUID), `encrypted_session_key` (TEXT B64), `nonce` (TEXT B64), `signature` (TEXT B64), `sender_certificate` (TEXT PEM), `ciphertext_sha256` (TEXT HEX), `status` (TEXT), `created_at` (TIMESTAMP).
+2. **`files`**: `id` (INTEGER PK AUTOINCREMENT), `sender_id` (INTEGER FK users), `receiver_id` (INTEGER FK users), `original_filename` (TEXT), `encrypted_filename` (TEXT UUID), `encrypted_session_key` (TEXT B64), `nonce` (TEXT B64), `signature` (TEXT B64), `sender_certificate` (TEXT PEM), `ciphertext_sha256` (TEXT HEX), `status` (TEXT), `created_at` (TIMESTAMP). *Phase 7 additions:* `package_version` (INTEGER, default 1), `sender_cert_serial` (TEXT), `client_request_id` (TEXT, unique per sender when set). *Reality check:* the binary columns are SQLite BLOBs holding raw bytes, not base64 text.
 3. **`certificates`**: `id` (INTEGER PK AUTOINCREMENT), `user_id` (INTEGER FK users), `certificate` (TEXT PEM), `serial_number` (INTEGER UNIQUE), `issued_at` (TIMESTAMP), `expires_at` (TIMESTAMP), `status` (TEXT active/revoked/expired).
 4. **`activity_log`**: `id` (INTEGER PK AUTOINCREMENT), `user_id` (INTEGER FK users), `action` (TEXT), `detail` (TEXT), `created_at` (TIMESTAMP).
 
@@ -436,7 +437,7 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 - **Objective:** Build `crypto/package.py` integrating AES-256-GCM, RSA-OAEP, RSA-PSS, and X.509 certificate validation into an end-to-end package builder/verifier/opener engine, and validate all 9 attack vectors in a standalone CLI suite.
 - **Assigned Developer / Phase Owner:** Developer 6 (Agent 6)
-- **Status:** `NOT_STARTED`
+- **Status:** `COMPLETE — 2026-10-10` (see "Phase 6 Handoff Notes" below)
 - **Dependencies:** Phase 3, Phase 4, Phase 5
 - **Files to Create / Modify:**
   - **Backend:**
@@ -474,44 +475,90 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 ### Phase 7 — Secure Upload, Storage and Sharing
 
-- **Objective:** Build backend database models for file authorization, the upload REST endpoint (`POST /api/files/upload`), and the React Upload page featuring a step-by-step visual pipeline animation, Sent Files list, and Dashboard integration.
+- **Objective:** Let an authenticated user upload a file, choose an eligible recipient from the certificate directory, have the backend encrypt/wrap/sign it with the existing Phase 6 `build_package()`, persist only ciphertext on disk and package metadata in SQLite, and view sent/received files — with file-level authorization enforced by the backend. **No decryption or plaintext download exists yet (Phase 8).**
 - **Assigned Developer / Phase Owner:** Developer 7 (Agent 7)
-- **Status:** `NOT_STARTED`
+- **Status:** `COMPLETE — 2026-10-10` (all acceptance criteria below verified; see "Known limitations" for non-blocking caveats)
 - **Dependencies:** Phase 1 through Phase 6
-- **Files to Create / Modify:**
-  - **Backend:**
-    - `backend/models/file.py` (`create_file_record`, `list_sent`, `list_received`, `get_file_for_receiver`, `get_file_for_sender`, `update_status`, `count_sent`, `count_received`)
-    - `backend/routes/files.py` (`/upload`, `/sent`)
-    - `backend/tests/test_upload.py`
-  - **Frontend:**
-    - `frontend/src/components/PipelineSteps.jsx` (Visual animation component: Encrypt $\rightarrow$ Wrap Key $\rightarrow$ Sign $\rightarrow$ Store)
-    - `frontend/src/components/PasswordPrompt.jsx` (Modal prompt for private key unlock password)
-    - `frontend/src/pages/Upload.jsx` (File selection, recipient dropdown, pipeline trigger, upload summary modal)
-    - `frontend/src/pages/SentFiles.jsx` (Sent files table view)
-    - `frontend/src/pages/Dashboard.jsx` (Updated with live sent/received counts and certificate validity status)
-- **Main Implementation Tasks:**
-  1. Build `models/file.py`: enforce query-level authorization (`get_file_for_receiver` and `get_file_for_sender` return `None` if `user_id` does not match, triggering 404 in routes to prevent file existence discovery).
-  2. Build `POST /api/files/upload`: Validate user authenticated, file present, non-empty, size $\le 25$ MB, filename sanitized via `secure_filename`. Validate recipient active certificate via `verify_certificate` **BEFORE** wrapping key. Validate sender password and unlock private key in-memory. Execute `build_package()`, write ciphertext bytes atomically (`os.replace`) to `storage/encrypted/<uuid4>.bin` with permission `0600`. Insert DB record (`status="pending_verification"`), log activity, return upload summary JSON.
-  3. Build `GET /api/files/sent` returning list of sent files (no decrypt capability for sender).
-  4. Build React components: `Upload.jsx` with file preview, recipient selector, `PasswordPrompt.jsx`, `PipelineSteps.jsx` animation, and `SentFiles.jsx`. Update `Dashboard.jsx`.
-- **APIs / Modules / Contracts Involved:**
-  - `POST /api/files/upload` (Form Data: `file`, `recipient_id`, `password`) $\rightarrow$ `{"message": "File sent", "file_id": 1, "summary": {"aes_algo": "AES-256-GCM", "wrap_algo": "RSA-OAEP", "sign_algo": "RSA-PSS", "sha256": "..."}}`
-  - `GET /api/files/sent` $\rightarrow$ `[{"id": 1, "original_filename": "...", "receiver_name": "...", "created_at": "...", "status": "..."}]`
-  - `GET /api/dashboard` $\rightarrow$ `{"sent_count": 5, "received_count": 3, "cert_status": "active", "cert_expires": "...", "recent_activity": [...]}`
-- **Security Requirements:**
-  - Atomic disk writes (write to temporary file, then `os.replace`) preventing partial reads.
-  - File permissions set to `0600` on disk.
-  - Recipient certificate strictly validated before wrapping session key.
-  - Plaintext file contents never written to disk under any circumstance.
-- **Tests Required:**
-  - Run `pytest backend/tests/test_upload.py` (upload success, `.bin` content non-plaintext, incorrect password rejection, revoked recipient rejection, unauthorized user 404 response).
-- **Acceptance Criteria:**
-  - Upload file from Siddharth to Vidhi via React UI.
-  - `<uuid4>.bin` appears in `storage/encrypted/` with `0600` permissions.
-  - Hex inspection confirms zero plaintext content.
-  - Sent Files page displays entry without decrypt action.
-- **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 7 upon phase completion.*
+- **Full handoff:** see the section **`Phase 7 → Phase 8 Handoff`** (a top-level `##` section placed directly before "Developer Handoff Tracking Ledger").
+
+#### Features implemented
+1. `POST /api/files/upload` — multipart upload → validate → revalidate sender and recipient → `build_package()` → atomic ciphertext write → DB row + audit entry in one transaction.
+2. `GET /api/files/sent`, `GET /api/files/received` — newest-first, searchable (`q`), paginated (`limit`/`offset`).
+3. `GET /api/files/<id>` — metadata for sender or recipient only; identical 404 for missing and unauthorized IDs.
+4. `GET /api/files/stats` — sent/received counters for the dashboard (not audited; avoids log spam). *Added beyond the four required endpoints because the Dashboard needs counts without triggering listing audit events.*
+5. Additive, idempotent migration of the `files` table; encrypted-payload storage module; file model with `reconstruct_package()` for Phase 8.
+6. Idempotent uploads via optional `client_request_id` (duplicate submissions never create a second record).
+7. React pages `/send`, `/sent`, `/received`, shared `TransferList`, navbar links, working dashboard tiles with live counts.
+
+#### Files created
+- Backend: `models/file.py`, `models/storage.py`, `tests/test_files.py`
+- Frontend: `frontend/src/pages/SendFile.jsx`, `frontend/src/pages/SentFiles.jsx`, `frontend/src/pages/ReceivedFiles.jsx`, `frontend/src/components/TransferList.jsx`, `frontend/src/utils/files.js`
+
+#### Files modified
+- `routes/files.py` (stub → full blueprint, `url_prefix="/api/files"`)
+- `app.py` (`InMemoryUploadRequest` request class), `config.py` (`MAX_UPLOAD_BYTES`, `MULTIPART_OVERHEAD_BYTES`; `MAX_CONTENT_LENGTH` = 25 MiB + 64 KiB)
+- `database/schema.sql`, `database/db.py` (`migrate_files_table`, `_backfill_sender_cert_serial`; `init_db` now runs the migration)
+- `models/user.py` (new `get_protected_private_key(user_id)`; `get_user_by_id` untouched), `models/activity.py` (new actions, `log_activity_throttled`)
+- `frontend/src/App.jsx`, `frontend/src/api/client.js`, `frontend/src/components/Navbar.jsx`, `frontend/src/pages/Dashboard.jsx`
+- **Not modified (contracts preserved):** all of `crypto/*`, `models/provisioning.py`, `routes/auth.py`, `routes/users.py`, `routes/admin.py`.
+- Removed: nothing. Dependencies added: **none** (no new Python or npm packages).
+
+#### Database migration (`files` table, additive only)
+| Column added | Type | Purpose |
+|---|---|---|
+| `package_version` | `INTEGER NOT NULL DEFAULT 1` | signed-header `version` |
+| `sender_cert_serial` | `TEXT` | signed-header `sender_cert_serial` (TEXT because serials are ~159-bit) |
+| `client_request_id` | `TEXT` | client idempotency key |
+
+Indexes added: `idx_files_sender_created (sender_id, created_at DESC, id DESC)`, `idx_files_receiver_created (receiver_id, created_at DESC, id DESC)`, and partial unique `idx_files_sender_request (sender_id, client_request_id) WHERE client_request_id IS NOT NULL`.
+Fresh databases get the columns from `schema.sql`; existing Phase 1–6 databases get them from `migrate_files_table()`. Migration command (idempotent, safe to repeat; also runs automatically in `create_app()`): `python init_db.py`. Existing users/certificates/activity rows and any legacy `files` rows are preserved; `sender_cert_serial` is back-filled from `sender_certificate` where parseable. Verified by `test_migration_*` tests against a Phase-6-shaped database.
+
+#### Package → `files` column mapping
+`sender_id`→`sender_id`; `receiver_id`→`receiver_id`; `original_filename`→`original_filename` (sanitized, also the signed value); random `<uuid4>.bin`→`encrypted_filename`; `wrapped_key`→`encrypted_session_key` (BLOB); `nonce`→`nonce` (BLOB); `signature`→`signature` (BLOB); `sender_cert_pem`→`sender_certificate` (BLOB); `ciphertext_sha256_hex`→`ciphertext_sha256`; `version`→`package_version`; `sender_cert_serial`→`sender_cert_serial` (str); `ciphertext_with_tag`→file `<ENCRYPTED_STORAGE_DIR>/<encrypted_filename>` (`ciphertext || 16-byte GCM tag`); `status` = `pending`; `created_at` = DB default.
+
+#### Backend API contracts (all require a logged-in, active session; mutating calls require `X-CSRFToken`)
+- `POST /api/files/upload` — `multipart/form-data`: `file` (exactly one part), `recipient_id` (digits), optional `client_request_id` (`[A-Za-z0-9_-]{8,64}`). Sender is always the session user.
+  - **201** `{"message","duplicate":false,"file":{id, original_filename, status:"pending", created_at, size_bytes, sender{id,name,email}, receiver{id,name,email}, ciphertext_sha256, package_version, sender_cert_serial, crypto{encryption,key_wrap,signature,digest,ciphertext_sha256}}}`
+  - **200** same body with `"duplicate":true` when the same sender re-sends the same `client_request_id` to the same recipient.
+  - **400** `{"error":"Validation failed","fields":{file|recipient_id|client_request_id: msg}}` (missing/empty file, bad/unknown/inactive/self recipient, recipient without valid active certificate matching its stored key) or `{"error":"Request must be multipart/form-data."}`
+  - **401** unauthenticated/inactive · **403** sender's own certificate invalid/revoked · **409** `client_request_id` reused for a different recipient · **413** file > 25 MiB (`{"error":"File is too large. The maximum size is 25 MiB."}`) or request body over Flask cap (`{"error":"Payload too large"}`) · **422** sender signing key missing or not matching its certificate · **500** generic safe message (storage/DB/crypto/key-unlock failure).
+  - Policy: **empty files and self-sending are rejected.**
+- `GET /api/files/sent` and `GET /api/files/received` — query `q` (≤100 chars; filename/name/email, wildcards escaped), `limit` (default 50, max 100), `offset`. **200** `{"files":[{id, original_filename, status, created_at, size_bytes, sender{...}, receiver{...}}], "total", "limit", "offset"}`; **400** on non-integer/negative paging. Listings never include wrapped key, nonce, signature, certificate, digest or storage name. Audited via throttled `file_list_sent` / `file_list_received` (one row per 60 s per user).
+- `GET /api/files/stats` — **200** `{"sent_count":n,"received_count":m}`.
+- `GET /api/files/<int:file_id>` — **200** `{"file":{...listing fields..., ciphertext_sha256, package_version, sender_cert_serial, storage_status:"ok|missing|corrupted", crypto{...}}}` for sender or receiver only; otherwise **404** `{"error":"File not found"}` (same for nonexistent, unauthorized, and out-of-range IDs; logged as `file_access_denied`). `storage_status` only compares stored bytes with the recorded digest — it is **not** the Phase 8 security verification.
+- No download/decrypt endpoint exists.
+
+#### Security decisions
+- **Private-key unlocking uses the existing Phase 3 contract** (`unprotect_private_key(blob, app SECRET_KEY, user_id)`); no password prompt is needed or used (the original Phase 7 text in this plan describing `password` / `PasswordPrompt.jsx` does not match the real key-protection design and was intentionally not implemented). The unlocked key is held only inside one request and is checked to match the sender's certificate public key.
+- Sender and recipient identities are each trusted only if an **active** certificate passes `verify_certificate()` (CA signature, validity, not revoked, subject email, KeyUsage) **and** certifies exactly the key stored in `users.public_key`. The recipient's public key comes from the DB, never from the browser. Unknown and inactive recipients get an identical response.
+- **No admin bypass**: file queries are scoped by `sender_id`/`receiver_id` in SQL for everyone.
+- **Plaintext never touches disk**: `app.request_class = InMemoryUploadRequest` overrides Werkzeug's `_get_file_stream` so uploads are buffered in `BytesIO` instead of `SpooledTemporaryFile` (which spills to `/tmp` above ~500 KB). Verified compatible with the installed Werkzeug 3.1.x; a test fails if the hook stops working.
+- Storage: `<uuid4>.bin` names validated by regex, resolved and confined to `ENCRYPTED_STORAGE_DIR` (symlink escape tested); temp file created with `O_EXCL` mode `0600` → `fsync` → `os.replace`; cleanup on any failure **before** commit; **after a successful commit the ciphertext is never deleted** (bug found and fixed during development; regression-tested).
+- Upload limit: `MAX_UPLOAD_BYTES` = 25 MiB enforced by the route; Flask's `MAX_CONTENT_LENGTH` = limit + 64 KiB multipart headroom so a file of exactly 25 MiB is accepted.
+- Activity actions added: `file_upload` (same transaction as the row), `file_upload_failed` (`reason=<code>`), `file_list_sent`, `file_list_received`, `file_access_denied`. Details contain IDs/reason codes only — never filenames, keys, cookies, tokens or plaintext.
+- Frontend: Axios request interceptor removes the default JSON `Content-Type` for `FormData` bodies (otherwise Axios would JSON-serialize the form); the CSRF header injection and retry are unchanged and verified in a real browser.
+
+#### Configuration
+No new environment variables. Required (unchanged): `SECRET_KEY` (≥32 bytes; must stay stable — it protects every user's private key), `CIPHERLOCK_CA_PASSPHRASE` (≥16 bytes), optional `SESSION_COOKIE_SECURE`, `FRONTEND_URL`. Directories `storage/encrypted/`, `keys/`, `certificates/` are auto-created by `create_app()`.
+
+#### Verification results (actual, run 2026-10-10, Python 3.12.3, Flask 3.1.3, Werkzeug 3.1.7, cryptography 46.0.6, Node 22)
+| Command | Result |
+|---|---|
+| `python -m pytest` (repo root) | **154 passed, 0 failed, 0 skipped** in ~99 s (76 pre-existing + 78 new in `tests/test_files.py`) |
+| `python -m pytest tests/test_files.py` | **78 passed** |
+| `python scripts/e2e_cli.py` | **PASS — 9/9 attack cases matched** (also asserted inside pytest) |
+| `cd frontend && npm run build` | **success** (1660 modules; the baseline build was *failing* because of a duplicate `Award` import in `Dashboard.jsx`, now fixed) |
+| Manual headless-Chrome E2E (Puppeteer, not committed) against live Flask + Vite with CSRF **enabled** | PASS: login → `/send` → pick recipient & file → double-click Send produced exactly **one** `POST /api/files/upload` (201) and one `.bin`; `/sent` lists it for Alice, `/received` for Bob; dashboard badges show live counts; anonymous `/send` redirects to `/login`; no plaintext marker found anywhere in server data; mobile nav shows all links |
+Mutation checks performed manually (not committed): disabling `InMemoryUploadRequest`, removing failure cleanup, and removing the post-commit guard each made the intended tests fail.
+
+#### Known limitations / deviations
+- A crash between the ciphertext write and DB commit can leave an orphan `.bin` (no garbage-collection script yet).
+- Whole upload is held in memory (≤25 MiB each); no rate limiting yet (Phase 10).
+- Only status `pending` exists; there is no `update_status` yet (Phase 8 must add it).
+- `GET /api/users/directory` returns `cert_serial` as a JSON number (~159-bit) → JavaScript loses precision (pre-existing; also visible on the Directory page). The Send page therefore shows the key fingerprint, not the serial. Recommend returning the serial as a string in a later phase.
+- Frontend has no automated tests (verified manually as above). Footer text ("Phase 2 …") and the Dashboard "Active Security / Guarantees in Phase 2" card are stale cosmetic text from earlier phases.
+- Deviations from the original Phase 7 text: no password prompt, no `PipelineSteps.jsx` animation (a static explanatory panel is used), `/api/dashboard` replaced by `/api/files/stats`, `/api/files/received` and `/api/files/<id>` implemented in Phase 7 (listing/metadata only), `update_status` deferred.
+- Registration-time key provisioning is unchanged; nothing in Phase 7 depends on a user's password.
 
 ---
 
@@ -521,9 +568,10 @@ Later phases depend on exact python function signatures and REST endpoints:
 - **Assigned Developer / Phase Owner:** Developer 8 (Agent 8)
 - **Status:** `NOT_STARTED`
 - **Dependencies:** Phase 1 through Phase 7
+- **Adjustments made by Phase 7 (read before starting):** `GET /api/files/received` and `GET /api/files/<id>` **already exist** (listing/metadata only) and `ReceivedFiles.jsx` + `TransferList.jsx` already exist — extend them rather than recreating. Key unlocking does not use the user's password (see handoff). See **`Phase 7 → Phase 8 Handoff`** for exact function names.
 - **Files to Create / Modify:**
   - **Backend:**
-    - `backend/routes/files.py` (add `/received`, `/<id>/verify`, `/<id>/download`)
+    - `backend/routes/files.py` (add `/<id>/verify`, `/<id>/download`; `/received` already done)
     - `backend/tests/test_flow.py`
   - **Frontend:**
     - `frontend/src/components/StatusBadge.jsx` (Status badge component)
@@ -641,6 +689,72 @@ Later phases depend on exact python function signatures and REST endpoints:
 
 ---
 
+## Phase 7 → Phase 8 Handoff
+
+*Written by Developer 7 (Agent 7), 2026-10-10. Everything below was verified against the final code unless marked "unverified".*
+
+### 1. Current implementation state
+- **Works end to end (verified by 78 pytest tests + a headless-Chrome run):** login → `/send` → choose recipient from `GET /api/users/directory` → upload → ciphertext on disk + metadata in SQLite → sender sees it in `/sent`, recipient in `/received`; per-file metadata via `GET /api/files/<id>`; dashboard counters.
+- **Intentionally not implemented (Phase 8+):** package verification endpoint, security-status UI, RSA-OAEP unwrap/AES-GCM decrypt for users, plaintext download, status transitions, attack lab, admin file tooling, rate limiting.
+- **Unverified / partial:** no automated frontend tests; behaviour on Windows (permissions, symlink test skipped there) was not run — development used Linux; the original authors used Windows (`os.chmod` is best-effort in `models/storage.py`).
+
+### 2. Backend contracts
+Blueprint `files_bp` is registered with `url_prefix="/api/files"` in `routes/files.py` (registered from `app.py`). Endpoints, request/response bodies and error codes are listed in the Phase 7 blueprint section above ("Backend API contracts"). Preserve: login required via `@login_required`; sender identity only from `g.current_user`; 404 `{"error":"File not found"}` for both missing and unauthorized IDs; JSON error shape `{"error": "...", "fields": {...}}`; no filesystem paths or crypto internals in responses.
+
+### 3. Database and migrations
+- `files` final columns: `id, sender_id, receiver_id, original_filename, encrypted_filename (UNIQUE), encrypted_session_key BLOB, nonce BLOB, signature BLOB, sender_certificate BLOB, ciphertext_sha256 TEXT, status TEXT DEFAULT 'pending', created_at TEXT, package_version INTEGER DEFAULT 1, sender_cert_serial TEXT, client_request_id TEXT`.
+- Initialize / migrate any database (idempotent): `python init_db.py` (also runs automatically inside `create_app()` via `database.db.init_db` → `migrate_files_table`). Do not drop/recreate tables. If you add columns in Phase 8 (e.g. verification result), follow the same pattern: add to `schema.sql` **and** to `migrate_files_table`.
+- Note: the "Global Module & API Specifications → Database Schema" list in this file is the original plan (says base64 TEXT); the real `files` BLOB columns hold raw bytes.
+
+### 4. Cryptographic package reconstruction
+`models/file.py::reconstruct_package(file_id, user_id)` returns a dict with **exactly** the keys `build_package()` returns: `version, sender_id, receiver_id, original_filename, nonce, wrapped_key, ciphertext_with_tag, ciphertext_sha256_hex, signature, sender_cert_pem, sender_cert_serial` (types: bytes for binary fields, `int` for `sender_cert_serial`, converted from the TEXT column). Sources: `package_version`, `sender_id`, `receiver_id`, `original_filename`, `nonce`, `encrypted_session_key`, `signature`, `sender_certificate`, `ciphertext_sha256`, `sender_cert_serial`, and the ciphertext read from `ENCRYPTED_STORAGE_DIR/<encrypted_filename>` via `models.storage.read_ciphertext`. `ciphertext_sha256_hex` is the *recorded signed* digest; `verify_package` recomputes the real digest from the bytes (design decision D6) — never replace it with a recomputed value. Tests prove the reconstructed package passes `verify_package` (TRUSTED), opens with `open_package` using the recipient key, fails with sender/third-party keys (`UnwrapError`), and a flipped ciphertext byte yields `POSSIBLE TAMPERING` / `TamperError`.
+Exceptions: `LookupError` (no such file for that user), `StoredPackageError` (NULL/invalid metadata), `models.storage.StoredFileMissingError` / `StoredFileCorruptError` / `StorageError` (messages contain no paths).
+**Caution:** `reconstruct_package` allows the *sender or* the receiver. Phase 8 verify/decrypt must be receiver-only — gate with `file_model.get_file_for_receiver(file_id, user_id)` first.
+
+### 5. Security and authorization
+- All queries in `models/file.py` are parameterized and scoped to the acting user (`sender_id`/`receiver_id`); admins have no bypass (tested). Detail endpoint returns 404 for non-participants and logs `file_access_denied`.
+- Recipient/sender identity trust = active certificate passing `verify_certificate()` **and** matching `users.public_key` (`_find_trusted_identity` in `routes/files.py`).
+- Private keys: `models.user.get_protected_private_key(user_id)` + `crypto.key_storage.unprotect_private_key(blob, current_app.config["SECRET_KEY"], user_id)`. **The login password is not the key passphrase.** Never return, log or session-store key material.
+- Uploads are buffered in memory by `InMemoryUploadRequest` (`app.py`); keep this for any future upload route.
+
+### 6. Files to inspect first
+`routes/files.py`, `models/file.py`, `models/storage.py`, `crypto/package.py` (`verify_package`, `open_package`, `SIGNATURE_FAILURE_MESSAGE`, `format_security_box`), `crypto/certificates.py`, `crypto/key_storage.py`, `models/user.py` (`get_protected_private_key`), `models/activity.py`, `database/db.py`, `database/schema.sql`, `tests/test_files.py` (fixtures `Ctx`/`ctx`, `send()` helper — reuse them), `frontend/src/components/TransferList.jsx`, `frontend/src/pages/ReceivedFiles.jsx`, `frontend/src/pages/SendFile.jsx`, `frontend/src/api/client.js`, `frontend/src/utils/files.js`, `frontend/src/App.jsx`.
+
+### 7. Exact commands
+```bash
+pip install -r requirements.txt
+cp .env.example .env            # set SECRET_KEY (>=32 bytes, keep stable) and CIPHERLOCK_CA_PASSPHRASE (>=16 bytes)
+python scripts/check_env.py
+python init_db.py               # creates/migrates database/cipherlock.db (idempotent)
+python scripts/init_ca.py       # once: creates the Root CA
+python scripts/create_admin.py  # optional: interactive admin
+python app.py                   # Flask API on http://127.0.0.1:5000
+cd frontend && npm ci && npm run dev   # SPA on http://localhost:5173 (proxies /api)
+# tests / build
+python -m pytest                        # 154 passed (~100 s)
+python -m pytest tests/test_files.py    # Phase 7 only (78)
+python scripts/e2e_cli.py               # Phase 6 CLI proof, 9/9
+cd frontend && npm run build
+```
+Tests build their own temp DB/CA/keys; they never touch `database/`, `keys/`, `certificates/` or `storage/`.
+
+### 8. Phase 8 starting point
+Reuse the existing pieces; do not rewrite crypto.
+1. **Retrieval:** add receiver-only routes in `routes/files.py` (e.g. `GET /api/files/<id>/verify`, `POST /api/files/<id>/download`). First `get_file_for_receiver(file_id, g.current_user["id"])` → else the same 404 as today. Then `reconstruct_package(file_id, user_id)`; map `StoredFileMissingError`/`StoredFileCorruptError`/`StoredPackageError` to a safe error/"cannot verify" result.
+2. **Certificate + signature + integrity:** call `crypto.package.verify_package(package, expected_sender_email=<sender email from the DB row, never from the package>)`. It already checks CA signature, validity, revocation (DB), subject email, KeyUsage, recomputes the ciphertext SHA-256 from the bytes, and verifies RSA-PSS over the canonical header. Also assert `package["sender_id"]`/`["receiver_id"]` equal the row IDs.
+3. **Security-status UI:** new page (e.g. `/received/:id`) rendering `SecurityReport` fields `certificate`, `signature`, `integrity`, `overall`, `messages` (+ `format_security_box`). Link rows in `TransferList.jsx`. The status labels in `utils/files.js::describeStatus` only know `pending`.
+4. **Unwrap + decrypt:** only if `report.overall == "TRUSTED"`: load the receiver key as in §5 and call `open_package(package, receiver_private_key, expected_sender_email)` (note the real signature has this 3rd optional parameter; it re-verifies and raises `TamperError`). Re-run verification on **every** download; never trust stored status.
+5. **Download:** stream from memory (`io.BytesIO` + `send_file`/`Response`), `Content-Disposition` from the sanitized `original_filename`, `Cache-Control: no-store`; never write plaintext to disk/temp files. Sender must not be able to download.
+6. **Failures (fail closed):** tampered ciphertext/metadata → `POSSIBLE TAMPERING`; invalid/revoked/expired cert → `UNTRUSTED SENDER`; wrong key → `UnwrapError`; GCM failure → `crypto.aes.DecryptionError`; respond with `SIGNATURE_FAILURE_MESSAGE` and never decrypt. Do not leak internals.
+7. **Status + audit:** add `update_status(file_id, status)` in `models/file.py` (whitelist), a migration only if new columns are needed, and new activity actions (add to `VALID_ACTIONS`, throttle noisy ones with `log_activity_throttled`, add labels in `Dashboard.jsx::formatAction`).
+8. The original Phase 8 text in this file says download requires the user's password; because key protection uses `SECRET_KEY` (not the password), a password prompt is optional re-authentication only — decide deliberately and do not change `crypto/key_storage.py` without approval.
+
+### 9. Outstanding work / compatibility rules
+- Must not change without good reason: package field names and canonical header (D6), `build_package`/`verify_package` signatures, key-protection contract, `files` column mapping, the 404-for-unauthorized behaviour, `InMemoryUploadRequest`, the Axios FormData interceptor.
+- Open items: orphan-ciphertext cleanup script; directory `cert_serial` should be sent as a string; stale "Phase 2" footer/dashboard text; rate limiting and security headers (Phase 10); frontend automated tests; Windows re-verification; `docs/ARCHITECTURE.md` and `README.md` were not updated for Phase 7 (Phase 10 documentation task).
+
+---
+
 ## Developer Handoff Tracking Ledger
 
 *This section will be continuously updated by each phase owner upon completion of their phase.*
@@ -651,9 +765,9 @@ Later phases depend on exact python function signatures and REST endpoints:
 | **Phase 2** | Developer 2 (Agent 2) | `COMPLETE` | 2026-10-08 | 28 passed | scrypt authentication, in-memory lockout (5 failures / 300s), session management, CSRF client integration, React 18 + Vite + Tailwind v3 SPA under `frontend/`, activity logging, tests/test_auth.py |
 | **Phase 3** | Developer 3 (Agent 3) | `COMPLETE` | 2026-10-08 | Crypto core | Complete |
 | **Phase 4** | Developer 4 (Agent 4) | `COMPLETE` | 2026-10-08 | 42 passed | Mini CA + X.509 certificates, certificate validation, revocation, directory, certificate viewer, admin CA panel |
-| **Phase 5** | Developer 5 (Agent 5) | `NOT_STARTED` | — | — | Pending Phase 5 execution |
-| **Phase 6** | Developer 6 (Agent 6) | `NOT_STARTED` | — | — | Pending Phase 6 execution |
-| **Phase 7** | Developer 7 (Agent 7) | `NOT_STARTED` | — | — | Pending Phase 7 execution |
+| **Phase 5** | Developer 5 (Agent 5) | `COMPLETE` | 2026-10-09 | 66 passed (cumulative) | RSA-OAEP wrap/unwrap, RSA-PSS sign/verify, `scripts/demo_wrap_sign.py`, `tests/test_wrap.py`, `tests/test_signatures.py` |
+| **Phase 6** | Developer 6 (Agent 6) | `COMPLETE` | 2026-10-10 | 76 passed (cumulative) | `crypto/package.py`, `scripts/e2e_cli.py` (9/9 attacks), `tests/test_package.py` |
+| **Phase 7** | Developer 7 (Agent 7) | `COMPLETE` | 2026-10-10 | 154 passed (cumulative; 78 new) | Secure upload/storage/sharing API, additive `files` migration, `models/file.py`, `models/storage.py`, `/send` `/sent` `/received` UI, dashboard counts, `tests/test_files.py`; CLI 9/9; frontend build OK |
 | **Phase 8** | Developer 8 (Agent 8) | `NOT_STARTED` | — | — | Pending Phase 8 execution |
 | **Phase 9** | Developer 9 (Agent 9) | `NOT_STARTED` | — | — | Pending Phase 9 execution |
 | **Phase 10** | Developer 10 (Agent 10) | `NOT_STARTED` | — | — | Pending Phase 10 execution |
@@ -831,7 +945,7 @@ Phase 4 is complete. Phase 5 can consume `users.public_key`, `users.certificate`
 - Phase 7 can now persist the package dictionary fields into the existing `files` table and must preserve the verify-before-decrypt ordering. `open_package` checks the signer trust/signature/integrity; the web workflow must additionally enforce that the authenticated user is the package's intended receiver.
 
 ### Phase 7 Handoff Notes
-*Status: Pending*
+*Status: COMPLETE — 2026-10-10.* Full details: the Phase 7 blueprint section above and **`Phase 7 → Phase 8 Handoff`**. Summary: upload encrypts/wraps/signs via the unchanged `build_package()`, stores only `<uuid4>.bin` ciphertext (atomic, 0600) plus metadata in the migrated `files` table; sent/received/metadata endpoints are participant-scoped; 154 backend tests, CLI 9/9 and the frontend build pass. Key caveats: orphan-ciphertext cleanup, `cert_serial` JSON precision, no decrypt/download yet.
 
 ### Phase 8 Handoff Notes
 *Status: Pending*

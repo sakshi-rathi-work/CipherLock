@@ -1,8 +1,9 @@
 """CipherLock application factory and local development entry point."""
+import io
 import logging
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, Request, jsonify, render_template
 from flask_wtf.csrf import CSRFProtect
 
 from config import Config
@@ -11,8 +12,23 @@ from database.db import close_db, init_db
 csrf = CSRFProtect()
 
 
+class InMemoryUploadRequest(Request):
+    """Keep multipart file parts in memory instead of spooling them to /tmp.
+
+    Werkzeug's default stream factory writes uploads larger than ~500 KB to a
+    temporary file. CipherLock must never persist plaintext, so uploaded file
+    parts are buffered in ``BytesIO`` (bounded by ``MAX_CONTENT_LENGTH``) and
+    encrypted before anything reaches the filesystem.
+    """
+
+    def _get_file_stream(self, total_content_length, content_type, filename=None,
+                         content_length=None):
+        return io.BytesIO()
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__, instance_path=str((Path(__file__).parent / "instance").resolve()))
+    app.request_class = InMemoryUploadRequest
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)

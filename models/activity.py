@@ -18,6 +18,12 @@ VALID_ACTIONS = {
     "login_failed",
     "login_locked",
     "logout",
+    # Phase 7 file-sharing events
+    "file_upload",
+    "file_upload_failed",
+    "file_list_sent",
+    "file_list_received",
+    "file_access_denied",
 }
 
 
@@ -42,6 +48,34 @@ def log_activity(
     )
     if commit:
         db.commit()
+
+
+def log_activity_throttled(
+    user_id: int | None,
+    action: str,
+    detail: str = "",
+    window_seconds: int = 60,
+    commit: bool = True,
+) -> bool:
+    """Log an audit entry unless the same user logged ``action`` very recently.
+
+    Used for high-frequency read events (e.g. listing files) so page refreshes do
+    not flood the audit trail. Returns True if a row was written.
+    """
+    db = get_db()
+    recent = db.execute(
+        """
+        SELECT 1 FROM activity_log
+        WHERE user_id IS ? AND action = ?
+          AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
+        LIMIT 1
+        """,
+        (user_id, action, f"-{int(window_seconds)} seconds"),
+    ).fetchone()
+    if recent is not None:
+        return False
+    log_activity(user_id, action, detail, commit=commit)
+    return True
 
 
 def list_recent_activity(user_id: int, limit: int = 10) -> list[dict[str, Any]]:

@@ -41,7 +41,12 @@ class Config:
     KEYS_DIR = (BASE_DIR / "keys").resolve()
     CA_KEYS_DIR = (KEYS_DIR / "ca").resolve()
     USER_KEYS_DIR = (KEYS_DIR / "users").resolve()
-    MAX_CONTENT_LENGTH = 25 * 1024 * 1024
+    # Phase 7: the plaintext file limit (enforced by the upload route) is 25 MiB.
+    # Flask's request-level cap adds headroom for multipart framing so a file of
+    # exactly 25 MiB is accepted while larger bodies are rejected with HTTP 413.
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+    MULTIPART_OVERHEAD_BYTES = 64 * 1024
+    MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "0").strip().lower() in {"1", "true", "yes"}
