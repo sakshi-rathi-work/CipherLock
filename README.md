@@ -8,8 +8,8 @@ The system is designed around confidentiality, integrity, sender authentication,
 
 ### Current Status
 
-**Phase 6 — Implementation Complete**
-**Phase 7 — Secure Upload, Storage and Sharing**
+**Phase 7 — Implementation Complete**
+**Phase 8 — Receiver workflow: verification, security-status UI, decryption and download**
 
 ### Implemented in Phase 2
 
@@ -52,7 +52,7 @@ The system is designed around confidentiality, integrity, sender authentication,
 | 4 | Mini certificate authority and X.509 certificates | `COMPLETE` |
 | 5 | RSA-OAEP key wrapping and RSA-PSS signatures | `COMPLETE` |
 | 6 | Hybrid encrypted file package | `COMPLETE` |
-| 7 | Secure file storage and sharing workflows | Planned |
+| 7 | Secure file storage and sharing workflows | `COMPLETE` |
 | 8 | Recipient verification and decryption | Planned |
 | 9 | Tampering, revocation, and security demonstrations | Planned |
 | 10 | Final system integration, production serving, and viva | Planned |
@@ -259,3 +259,17 @@ python scripts\e2e_cli.py
 ```bash
 python scripts/e2e_cli.py
 ```
+
+
+### Implemented in Phase 7
+
+- **Secure File Upload:** Supports authenticated file uploads and coordinates file processing through the backend.
+- **File Metadata Management:** `models/file.py` manages file records and related database operations.
+- **File Storage and Retrieval:** `models/storage.py` handles storing and retrieving file contents.
+- **File Workflow API:** `routes/files.py` manages backend operations for uploading, listing, downloading, and sharing files.
+- **Send File Interface:** `frontend/src/pages/SendFile.jsx` allows users to initiate file transfers to recipients.
+- **Sent and Received Files:** `SentFiles.jsx` and `ReceivedFiles.jsx` display outgoing and incoming file transfers.
+- **Reusable Components and Utilities:** `TransferList.jsx` displays transfer information, while `utils/files.js` provides reusable file-related helper functions.
+- **Automated Tests:** `tests/test_files.py` tests file handling, access permissions, and sharing workflows.
+- **Security Integration:** Extends the existing application with file-sharing functionality while integrating with its authentication and security architecture.
+- **Verification:** Run `python -m pytest -q -o addopts=''` and `cd frontend` followed by `npm run build` to verify the backend tests and frontend build. Update the README with the actual results.
