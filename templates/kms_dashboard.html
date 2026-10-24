@@ -1,0 +1,1059 @@
+{% extends "base.html" %}
+
+{% block title %}KMS Management · CipherLock{% endblock %}
+
+{% block content %}
+<style>
+  .text-lime {
+    color: #c4f16e !important;
+  }
+  .bg-lime {
+    background-color: #c4f16e !important;
+    color: #0b1b2e !important;
+  }
+  .border-lime {
+    border-color: rgba(196, 241, 110, 0.4) !important;
+  }
+  .btn-lime {
+    background: linear-gradient(180deg, #d4f98c 0%, #bdea5c 100%);
+    border: 0;
+    color: #0b1b2e;
+    font-weight: 650;
+    border-radius: 8px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 4px 14px -4px rgba(140, 190, 50, 0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn-lime:hover {
+    background: linear-gradient(180deg, #def9a0 0%, #c8f06c 100%);
+    color: #0b1b2e;
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 6px 18px -4px rgba(140, 190, 50, 0.65);
+  }
+  .btn-lime:disabled {
+    opacity: 0.6;
+    transform: none;
+    cursor: not-allowed;
+  }
+  .hierarchy-node {
+    background: rgba(18, 40, 63, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    transition: all 0.2s ease;
+  }
+  .hierarchy-node:hover {
+    border-color: rgba(196, 241, 110, 0.35);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  .hierarchy-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 0.25rem 0;
+  }
+  .hierarchy-line {
+    width: 2px;
+    height: 22px;
+    background: linear-gradient(180deg, rgba(196, 241, 110, 0.8), rgba(196, 241, 110, 0.2));
+  }
+  .hierarchy-pill {
+    font-size: 0.72rem;
+    font-family: var(--font-mono, monospace);
+    background: #0b1b2e;
+    border: 1px dashed rgba(196, 241, 110, 0.5);
+    color: #c4f16e;
+    padding: 0.15rem 0.75rem;
+    border-radius: 20px;
+    margin: -4px 0;
+    z-index: 2;
+    letter-spacing: 0.04em;
+  }
+  .hierarchy-arrow {
+    color: #c4f16e;
+    font-size: 0.9rem;
+    line-height: 1;
+    margin-top: -2px;
+  }
+  .stat-card-inner {
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.85rem 1rem;
+  }
+</style>
+
+<div class="container py-4">
+  <!-- Toast Notification Container -->
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;">
+    <div id="kmsToast" class="toast align-items-center text-white border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body d-flex align-items-center gap-2" id="kmsToastBody">
+          Operation message here.
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Page Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}" class="text-lime text-decoration-none">Dashboard</a></li>
+          <li class="breadcrumb-item active text-secondary" aria-current="page">KMS Management</li>
+        </ol>
+      </nav>
+      <h1 class="h2 fw-bold text-white mb-1 d-flex align-items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#c4f16e" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M0 8a4 4 0 0 1 7.465-2H14a.5.5 0 0 1 .354.146l1.5 1.5a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0L13 9.207l-.646.647a.5.5 0 0 1-.708 0L11 9.207l-.646.647a.5.5 0 0 1-.708 0L9 9.207l-.646.647a.5.5 0 0 1-.708 0L7.465 10A4 4 0 0 1 0 8m4-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/>
+        </svg>
+        Key Management System
+      </h1>
+      <p class="text-secondary small mb-0">Envelope encryption key hierarchy, rotation policies, and audit trail.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm font-monospace d-inline-flex align-items-center gap-1" id="refreshBtn" onclick="refreshDashboard(true)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+          <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+        </svg>
+        Refresh
+      </button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm font-monospace">
+        ← Back to Dashboard
+      </a>
+    </div>
+  </div>
+
+  <!-- 2. KMS Status Banner -->
+  <div id="statusBannerContainer" class="mb-4">
+    <!-- Rendered dynamically by JavaScript -->
+    <div class="card bg-dark border-secondary p-3 text-center text-secondary small font-monospace">
+      Loading KMS status...
+    </div>
+  </div>
+
+  <!-- 3. Key Hierarchy Card -->
+  <div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Envelope Encryption Key Hierarchy</span>
+      <span class="badge bg-dark border border-secondary text-secondary font-monospace small">NIST SP 800-57 Architecture</span>
+    </div>
+    <div class="card-body p-4">
+      <div class="d-flex flex-column align-items-center mx-auto" style="max-width: 640px;">
+        <!-- Level 1: Master Key -->
+        <div class="hierarchy-node w-100 border-warning border-opacity-50">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <div class="p-2 rounded bg-warning bg-opacity-10 text-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+                </svg>
+              </div>
+              <div>
+                <div class="text-white fw-bold">Master Key (MK)</div>
+                <div class="text-secondary small font-monospace">Derived from <code>SECRET_KEY</code> via HKDF-SHA256 (32-byte)</div>
+              </div>
+            </div>
+            <span class="badge bg-warning bg-opacity-25 text-warning border border-warning font-monospace small">In-Memory · Nonce Salt</span>
+          </div>
+        </div>
+
+        <!-- Connector 1 -->
+        <div class="hierarchy-connector w-100 my-1">
+          <div class="hierarchy-line"></div>
+          <div class="hierarchy-pill">protects with AES-256-GCM</div>
+          <div class="hierarchy-line"></div>
+          <div class="hierarchy-arrow">▼</div>
+        </div>
+
+        <!-- Level 2: Active KEK -->
+        <div class="hierarchy-node w-100 border-lime">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <div class="p-2 rounded bg-success bg-opacity-10 text-lime">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#c4f16e" viewBox="0 0 16 16">
+                  <path d="M0 8a4 4 0 0 1 7.465-2H14a.5.5 0 0 1 .354.146l1.5 1.5a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0L13 9.207l-.646.647a.5.5 0 0 1-.708 0L11 9.207l-.646.647a.5.5 0 0 1-.708 0L9 9.207l-.646.647a.5.5 0 0 1-.708 0L7.465 10A4 4 0 0 1 0 8m4-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/>
+                </svg>
+              </div>
+              <div>
+                <div class="text-white fw-bold d-flex align-items-center gap-2">
+                  <span>Key Encryption Key (KEK)</span>
+                  <span id="hierarchyKekBadge" class="badge bg-success font-monospace">v-</span>
+                </div>
+                <div class="text-secondary small font-monospace">AES-256 Symmetric Key · Encrypted at Rest in DB</div>
+              </div>
+            </div>
+            <span class="badge bg-success bg-opacity-25 text-lime border border-success font-monospace small">Active Envelope Key</span>
+          </div>
+        </div>
+
+        <!-- Connector 2 -->
+        <div class="hierarchy-connector w-100 my-1">
+          <div class="hierarchy-line"></div>
+          <div class="hierarchy-pill">wraps per-file DEKs</div>
+          <div class="hierarchy-line"></div>
+          <div class="hierarchy-arrow">▼</div>
+        </div>
+
+        <!-- Level 3: Registered DEKs -->
+        <div class="hierarchy-node w-100 border-info border-opacity-50">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <div class="p-2 rounded bg-info bg-opacity-10 text-info">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z"/>
+                </svg>
+              </div>
+              <div>
+                <div class="text-white fw-bold d-flex align-items-center gap-2">
+                  <span>Data Encryption Keys (DEKs)</span>
+                  <span id="hierarchyDekCount" class="badge bg-info text-dark font-monospace">0 DEKs</span>
+                </div>
+                <div class="text-secondary small font-monospace">AES-256-GCM · Direct File Payload Encryption</div>
+              </div>
+            </div>
+            <span class="badge bg-info bg-opacity-25 text-info border border-info font-monospace small">Per-File Isolation</span>
+          </div>
+        </div>
+      </div>
+      <p class="text-center text-secondary small font-monospace mt-3 mb-0">
+        Data keys never touch persistent storage in plaintext. Files are encrypted with DEKs; DEKs are wrapped with active KEK; KEK is protected by Master Key.
+      </p>
+    </div>
+  </div>
+
+  <!-- 4. Actions Row -->
+  <div class="row g-4 mb-4">
+    <!-- Action 1: Rotate KEK -->
+    <div class="col-md-6">
+      <div class="card h-100 bg-dark border-secondary shadow-sm">
+        <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+          <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Rotate KEK</span>
+          <span class="badge bg-dark border border-secondary text-secondary font-monospace small">Generates New Version</span>
+        </div>
+        <div class="card-body p-3 d-flex flex-column justify-content-between">
+          <div>
+            <p class="text-secondary small mb-3">
+              Generate a new KEK version and demote current active KEK to <span class="badge bg-secondary font-monospace">rotated</span>. Subsequent file uploads will be encrypted with the new KEK.
+            </p>
+            <div class="mb-3">
+              <label for="rotateDescription" class="form-label text-light small">Rotation Description / Reason</label>
+              <input type="text" id="rotateDescription" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" placeholder="e.g. Scheduled quarterly rotation">
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-lime btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-2" id="rotateKekBtn" onclick="handleRotateKek()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+              </svg>
+              <span>Rotate KEK Now</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action 2: Rewrap All DEKs -->
+    <div class="col-md-6">
+      <div class="card h-100 bg-dark border-secondary shadow-sm">
+        <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+          <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Rewrap All DEKs</span>
+          <span class="badge bg-dark border border-secondary text-secondary font-monospace small">Envelope Migration</span>
+        </div>
+        <div class="card-body p-3 d-flex flex-column justify-content-between">
+          <div>
+            <p class="text-secondary small mb-2">
+              Re-encrypts all file DEKs wrapped under historical or compromised KEKs with the current active KEK. File payloads on disk remain untouched.
+            </p>
+            <div class="stat-card-inner mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="text-secondary small">DEKs on Non-Active KEKs:</span>
+                <span id="nonActiveDekCount" class="font-monospace fw-bold text-warning">0</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-1">
+                <span class="text-secondary small">Target Active KEK:</span>
+                <span id="rewrapTargetKek" class="font-monospace fw-bold text-lime">v-</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-outline-info btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-2" id="rewrapDekBtn" onclick="handleRewrapAll()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8m15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0M4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5z"/>
+              </svg>
+              <span>Rewrap All DEKs Under Active KEK</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. KEK Versions Table -->
+  <div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Key Encryption Key (KEK) Versions</span>
+      <span id="kekVersionsCountBadge" class="badge bg-dark border border-secondary text-secondary font-monospace small">0 Versions</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0">
+        <thead class="table-secondary text-uppercase small" style="letter-spacing: 0.05em; font-size: 0.75rem;">
+          <tr>
+            <th scope="col" class="py-3 px-3">Version</th>
+            <th scope="col" class="py-3">Status</th>
+            <th scope="col" class="py-3">Description</th>
+            <th scope="col" class="py-3">Created</th>
+            <th scope="col" class="py-3">Expires</th>
+            <th scope="col" class="py-3 text-center">DEK Count</th>
+            <th scope="col" class="py-3 text-end px-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="kekVersionsTableBody">
+          <tr>
+            <td colspan="7" class="text-center py-4 text-secondary font-monospace small">
+              Loading KEK versions...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 6. Rotation Policy Editor -->
+  <div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Rotation Policy Configuration</span>
+      <span id="policyUpdatedAtBadge" class="badge bg-dark border border-secondary text-secondary font-monospace small">Updated: —</span>
+    </div>
+    <div class="card-body p-4">
+      <form id="policyForm" onsubmit="handleSavePolicy(event)">
+        <div class="row g-3 align-items-center mb-3">
+          <div class="col-md-4">
+            <label for="policyInterval" class="form-label text-light small mb-1">Rotation Interval (Days)</label>
+            <input type="number" id="policyInterval" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" min="1" max="365" required>
+            <div class="text-secondary small mt-1">Key validity period before rotation is flagged (1–365).</div>
+          </div>
+          <div class="col-md-4">
+            <label for="policyMaxVersions" class="form-label text-light small mb-1">Max Retained Versions</label>
+            <input type="number" id="policyMaxVersions" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" min="2" max="100" required>
+            <div class="text-secondary small mt-1">Upper limit of historical KEK records to keep (2–100).</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-light small mb-1 d-block">Automated Rotation</label>
+            <div class="form-check form-switch mt-1">
+              <input class="form-check-input" type="checkbox" id="policyAutoRotate">
+              <label class="form-check-label text-light small" for="policyAutoRotate">
+                Enable auto-rotation on expiry
+              </label>
+            </div>
+            <div class="text-secondary small mt-1">Automatically rotates KEK when interval is exceeded.</div>
+          </div>
+        </div>
+        <div class="d-flex justify-content-end">
+          <button type="submit" class="btn btn-lime btn-sm px-3" id="savePolicyBtn">
+            Save Policy
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. Audit Trail -->
+  <div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Cryptographic Audit Trail</span>
+        <span id="auditTotalBadge" class="badge bg-dark border border-secondary text-secondary font-monospace small">0 Logs</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label for="auditActionFilter" class="text-secondary small mb-0 font-monospace">Filter:</label>
+        <select id="auditActionFilter" class="form-select form-select-sm bg-dark text-light border-secondary font-monospace" style="width: auto;" onchange="handleAuditFilterChange()">
+          <option value="">All Actions</option>
+          <option value="kek_created">kek_created</option>
+          <option value="kek_rotated">kek_rotated</option>
+          <option value="kek_compromised">kek_compromised</option>
+          <option value="kek_recovered">kek_recovered</option>
+          <option value="kek_destroyed">kek_destroyed</option>
+          <option value="dek_registered">dek_registered</option>
+          <option value="dek_rewrapped">dek_rewrapped</option>
+          <option value="dek_rewrap_batch">dek_rewrap_batch</option>
+          <option value="policy_updated">policy_updated</option>
+          <option value="auto_rotation_check">auto_rotation_check</option>
+          <option value="auto_rotation_triggered">auto_rotation_triggered</option>
+          <option value="master_key_verified">master_key_verified</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0">
+        <thead class="table-secondary text-uppercase small" style="letter-spacing: 0.05em; font-size: 0.75rem;">
+          <tr>
+            <th scope="col" class="py-3 px-3">Time</th>
+            <th scope="col" class="py-3">Action</th>
+            <th scope="col" class="py-3">KEK Version</th>
+            <th scope="col" class="py-3">User</th>
+            <th scope="col" class="py-3">Detail</th>
+          </tr>
+        </thead>
+        <tbody id="auditTableBody">
+          <tr>
+            <td colspan="5" class="text-center py-4 text-secondary font-monospace small">
+              Loading audit logs...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-secondary bg-opacity-10 border-secondary py-2 px-3 d-flex justify-content-between align-items-center">
+      <span id="auditPaginationInfo" class="text-secondary small font-monospace">Showing 0-0 of 0</span>
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-secondary font-monospace" id="auditPrevBtn" onclick="handleAuditPage(-1)" disabled>
+          ← Prev
+        </button>
+        <button type="button" class="btn btn-outline-secondary font-monospace" id="auditNextBtn" onclick="handleAuditPage(1)" disabled>
+          Next →
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Compromise Confirmation -->
+<div class="modal fade" id="compromiseModal" tabindex="-1" aria-labelledby="compromiseModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-danger d-flex align-items-center gap-2" id="compromiseModalLabel">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+          </svg>
+          Mark KEK as Compromised
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary small">
+          Marking KEK <strong class="text-white font-monospace" id="compromiseKekVersionLabel">v-</strong> as compromised will immediately flag all associated DEKs for mandatory rewrapping.
+        </p>
+        <div class="mb-3">
+          <label for="compromiseReason" class="form-label text-light small">Reason for Compromise</label>
+          <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" id="compromiseReason" placeholder="e.g. Unauthorized storage access or security notice">
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger btn-sm" id="confirmCompromiseBtn" onclick="submitCompromise()">
+          Confirm Compromise
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // State variables
+  let currentCsrfToken = "{{ csrf_token() }}";
+  let currentStatus = null;
+  let currentKeys = [];
+  let currentPolicy = null;
+  let targetCompromiseVersion = null;
+
+  // Audit pagination state
+  let auditLimit = 20;
+  let auditOffset = 0;
+  let auditTotal = 0;
+
+  // Utility: HTML escaping
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Utility: Toast notification
+  function showToast(message, type = 'success') {
+    const toastEl = document.getElementById('kmsToast');
+    const toastBody = document.getElementById('kmsToastBody');
+    if (!toastEl || !toastBody) return;
+
+    toastEl.className = 'toast align-items-center text-white border-0 shadow-lg';
+    if (type === 'success') {
+      toastEl.classList.add('bg-success');
+    } else if (type === 'danger' || type === 'error') {
+      toastEl.classList.add('bg-danger');
+    } else if (type === 'info') {
+      toastEl.classList.add('bg-primary');
+    } else if (type === 'warning') {
+      toastEl.classList.add('bg-warning', 'text-dark');
+    }
+
+    toastBody.innerHTML = `<span>${escapeHtml(message)}</span>`;
+    const bsToast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4500 });
+    bsToast.show();
+  }
+
+  // Utility: Format ISO timestamp
+  function formatTimestamp(isoStr) {
+    if (!isoStr) return '—';
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      return d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    } catch {
+      return isoStr;
+    }
+  }
+
+  // Utility: Refresh CSRF token from endpoint
+  async function refreshCsrfToken() {
+    try {
+      const res = await fetch('/api/csrf-token', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.csrf_token) {
+          currentCsrfToken = data.csrf_token;
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh CSRF token:', err);
+    }
+    return currentCsrfToken;
+  }
+
+  // Utility: API caller with JSON and CSRF handling
+  async function callApi(url, method = 'GET', body = null) {
+    const headers = {};
+    if (method !== 'GET') {
+      await refreshCsrfToken();
+      headers['X-CSRFToken'] = currentCsrfToken;
+      if (body) {
+        headers['Content-Type'] = 'application/json';
+      }
+    }
+
+    const options = {
+      method,
+      credentials: 'same-origin',
+      headers
+    };
+    if (body && method !== 'GET') {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+
+    if (!response.ok) {
+      const msg = data.error || data.message || `Request failed (${response.status})`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // 1. Fetch & Render Status Banner
+  async function loadStatus() {
+    const container = document.getElementById('statusBannerContainer');
+    try {
+      const res = await callApi('/api/kms/status');
+      currentStatus = res.kms;
+
+      const isInitialized = currentStatus.initialized;
+      const activeVersion = currentStatus.active_kek_version || 'None';
+      const totalKeks = currentStatus.total_kek_versions ?? 0;
+      const totalDeks = currentStatus.total_deks ?? 0;
+      const compromised = currentStatus.compromised_keks ?? 0;
+      const rotationCheck = currentStatus.rotation_check || {};
+      const rotationNeeded = rotationCheck.rotation_needed || false;
+      const rotationReason = rotationCheck.reason || 'KEK lifecycle within policy limits.';
+
+      // Update Key Hierarchy card values
+      document.getElementById('hierarchyKekBadge').textContent = isInitialized ? `v${activeVersion}` : 'None';
+      document.getElementById('hierarchyDekCount').textContent = `${totalDeks} DEKs`;
+      document.getElementById('rewrapTargetKek').textContent = isInitialized ? `v${activeVersion}` : 'None';
+
+      if (!isInitialized) {
+        container.innerHTML = `
+          <div class="alert alert-danger border-0 shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between p-3 gap-3" style="background: rgba(231, 76, 60, 0.15); border-left: 5px solid #e74c3c !important; color: #ffffff;">
+            <div class="d-flex align-items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#e74c3c" viewBox="0 0 16 16" class="flex-shrink-0">
+                <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+              </svg>
+              <div>
+                <h5 class="fw-bold mb-0 text-white">KMS NOT INITIALIZED</h5>
+                <div class="small text-danger-emphasis">No active Key Encryption Key found. Envelope encryption is currently dormant.</div>
+              </div>
+            </div>
+            <button class="btn btn-danger btn-sm font-monospace" onclick="handleInitializeKms()">
+              Initialize KMS
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      // Operational Status Banner
+      container.innerHTML = `
+        <div class="card bg-dark border-secondary shadow-sm">
+          <div class="p-3 border-bottom border-secondary d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3" style="background: rgba(46, 204, 113, 0.08); border-left: 5px solid #2ecc71 !important;">
+            <div class="d-flex align-items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#2ecc71" viewBox="0 0 16 16" class="flex-shrink-0">
+                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+              </svg>
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <h5 class="fw-bold mb-0 text-white">STATUS: OPERATIONAL</h5>
+                  <span class="badge bg-success font-monospace">INITIALIZED</span>
+                  ${rotationNeeded ? '<span class="badge bg-warning text-dark font-monospace">ROTATION DUE</span>' : '<span class="badge bg-secondary font-monospace">HEALTHY</span>'}
+                </div>
+                <div class="small text-secondary mt-1">
+                  Active KEK <strong class="text-lime font-monospace">v${activeVersion}</strong> wraps file data encryption keys. ${escapeHtml(rotationReason)}
+                </div>
+              </div>
+            </div>
+            <div class="text-md-end">
+              <span class="badge bg-dark border border-secondary text-lime font-monospace px-3 py-2 fs-6">
+                Active KEK: v${activeVersion}
+              </span>
+            </div>
+          </div>
+          <div class="card-body p-3">
+            <div class="row g-3">
+              <div class="col-6 col-md-3">
+                <div class="stat-card-inner">
+                  <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Active KEK</div>
+                  <div class="h4 fw-bold text-lime mb-0 font-monospace">v${activeVersion}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="stat-card-inner">
+                  <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Total KEKs</div>
+                  <div class="h4 fw-bold text-white mb-0 font-monospace">${totalKeks}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="stat-card-inner">
+                  <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Registered DEKs</div>
+                  <div class="h4 fw-bold text-info mb-0 font-monospace">${totalDeks}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="stat-card-inner">
+                  <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Compromised</div>
+                  <div class="h4 fw-bold ${compromised > 0 ? 'text-danger' : 'text-white'} mb-0 font-monospace">${compromised}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `
+        <div class="alert alert-danger border-0 p-3">
+          Failed to load KMS status: ${escapeHtml(err.message)}
+        </div>
+      `;
+    }
+  }
+
+  // 2. Fetch & Render KEK Versions
+  async function loadKeys() {
+    const tbody = document.getElementById('kekVersionsTableBody');
+    const badge = document.getElementById('kekVersionsCountBadge');
+    try {
+      const res = await callApi('/api/kms/keys');
+      currentKeys = res.keys || [];
+      badge.textContent = `${res.total || currentKeys.length} Versions`;
+
+      if (currentKeys.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center py-4 text-secondary font-monospace small">
+              No KEK versions found.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      // Calculate DEKs on non-active KEKs
+      const activeVersion = currentStatus ? currentStatus.active_kek_version : null;
+      let nonActiveCount = 0;
+      currentKeys.forEach(k => {
+        if (k.version !== activeVersion) {
+          nonActiveCount += (k.dek_count || 0);
+        }
+      });
+      document.getElementById('nonActiveDekCount').textContent = `${nonActiveCount} DEKs`;
+
+      let html = '';
+      currentKeys.forEach(k => {
+        // Status Badge
+        let statusBadge = '';
+        if (k.status === 'active') {
+          statusBadge = '<span class="badge bg-success font-monospace px-2 py-1">ACTIVE</span>';
+        } else if (k.status === 'rotated') {
+          statusBadge = '<span class="badge bg-secondary font-monospace px-2 py-1">ROTATED</span>';
+        } else if (k.status === 'compromised') {
+          statusBadge = '<span class="badge bg-danger font-monospace px-2 py-1">COMPROMISED</span>';
+        } else if (k.status === 'destroyed') {
+          statusBadge = '<span class="badge bg-dark border border-secondary text-secondary font-monospace px-2 py-1">DESTROYED</span>';
+        } else {
+          statusBadge = `<span class="badge bg-secondary font-monospace px-2 py-1">${escapeHtml(k.status)}</span>`;
+        }
+
+        // Actions
+        let actionsHtml = '';
+        if (k.status === 'active' || k.status === 'rotated') {
+          actionsHtml += `
+            <button class="btn btn-outline-danger btn-sm font-monospace py-0 px-2" onclick="openCompromiseModal(${k.version})" title="Mark KEK as compromised">
+              Compromise
+            </button>
+          `;
+        } else if (k.status === 'compromised') {
+          actionsHtml += `
+            <button class="btn btn-outline-warning btn-sm font-monospace py-0 px-2" onclick="handleRecoverKek(${k.version})" title="Recover from compromise">
+              Recover
+            </button>
+          `;
+        }
+
+        // Destroy action: only allowed for rotated or compromised KEKs with 0 DEKs
+        if ((k.status === 'rotated' || k.status === 'compromised') && k.dek_count === 0) {
+          actionsHtml += `
+            <button class="btn btn-outline-secondary btn-sm font-monospace py-0 px-2 ms-1 text-danger" onclick="handleDestroyKek(${k.version})" title="Irreversibly destroy key">
+              Destroy
+            </button>
+          `;
+        }
+
+        if (!actionsHtml) {
+          actionsHtml = '<span class="text-secondary small font-monospace">—</span>';
+        }
+
+        html += `
+          <tr>
+            <td class="px-3">
+              <span class="font-monospace fw-bold ${k.status === 'active' ? 'text-lime' : 'text-white'}">v${k.version}</span>
+            </td>
+            <td>${statusBadge}</td>
+            <td class="small text-secondary font-monospace">${escapeHtml(k.description || '—')}</td>
+            <td class="small text-secondary font-monospace">${formatTimestamp(k.created_at)}</td>
+            <td class="small text-secondary font-monospace">${k.expires_at ? formatTimestamp(k.expires_at) : 'Never'}</td>
+            <td class="text-center font-monospace">
+              <span class="badge ${k.dek_count > 0 ? 'bg-secondary bg-opacity-50 text-white' : 'bg-dark text-secondary'} font-monospace">
+                ${k.dek_count}
+              </span>
+            </td>
+            <td class="text-end px-3">${actionsHtml}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    } catch (err) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-center py-4 text-danger font-monospace small">
+            Failed to load KEK versions: ${escapeHtml(err.message)}
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  // 3. Fetch & Render Policy Editor
+  async function loadPolicy() {
+    try {
+      const res = await callApi('/api/kms/policy');
+      currentPolicy = res.policy || {};
+
+      document.getElementById('policyInterval').value = currentPolicy.rotation_interval_days ?? 90;
+      document.getElementById('policyMaxVersions').value = currentPolicy.max_versions ?? 10;
+      document.getElementById('policyAutoRotate').checked = Boolean(currentPolicy.auto_rotate);
+
+      const badge = document.getElementById('policyUpdatedAtBadge');
+      if (currentPolicy.updated_at) {
+        badge.textContent = `Updated: ${formatTimestamp(currentPolicy.updated_at)}`;
+      } else {
+        badge.textContent = 'Updated: Default';
+      }
+    } catch (err) {
+      console.error('Failed to load rotation policy:', err);
+    }
+  }
+
+  // 4. Fetch & Render Audit Trail
+  async function loadAudit() {
+    const tbody = document.getElementById('auditTableBody');
+    const badge = document.getElementById('auditTotalBadge');
+    const paginationInfo = document.getElementById('auditPaginationInfo');
+    const prevBtn = document.getElementById('auditPrevBtn');
+    const nextBtn = document.getElementById('auditNextBtn');
+    const actionFilter = document.getElementById('auditActionFilter').value;
+
+    let url = `/api/kms/audit?limit=${auditLimit}&offset=${auditOffset}`;
+    if (actionFilter) {
+      url += `&action=${encodeURIComponent(actionFilter)}`;
+    }
+
+    try {
+      const res = await callApi(url);
+      const entries = res.entries || [];
+      auditTotal = res.total ?? entries.length;
+
+      badge.textContent = `${auditTotal} Logs`;
+
+      if (entries.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="text-center py-4 text-secondary font-monospace small">
+              No audit log entries matching criteria.
+            </td>
+          </tr>
+        `;
+        paginationInfo.textContent = 'Showing 0 of 0';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        return;
+      }
+
+      let html = '';
+      entries.forEach(e => {
+        // Action badge coloring
+        let actionBadgeClass = 'bg-secondary';
+        if (e.action === 'kek_rotated') actionBadgeClass = 'bg-primary';
+        else if (e.action === 'kek_created') actionBadgeClass = 'bg-success';
+        else if (e.action === 'kek_compromised') actionBadgeClass = 'bg-danger';
+        else if (e.action === 'kek_recovered') actionBadgeClass = 'bg-warning text-dark';
+        else if (e.action === 'kek_destroyed') actionBadgeClass = 'bg-dark border border-danger text-danger';
+        else if (e.action === 'dek_rewrapped' || e.action === 'dek_rewrap_batch') actionBadgeClass = 'bg-info text-dark';
+        else if (e.action === 'policy_updated') actionBadgeClass = 'bg-warning text-dark';
+
+        html += `
+          <tr>
+            <td class="px-3 small text-secondary font-monospace">${formatTimestamp(e.created_at)}</td>
+            <td><span class="badge ${actionBadgeClass} font-monospace">${escapeHtml(e.action)}</span></td>
+            <td class="font-monospace text-lime small">${e.kek_version !== null && e.kek_version !== undefined ? `v${e.kek_version}` : '—'}</td>
+            <td class="small text-secondary font-monospace">${e.user_id ? `#${e.user_id}` : 'System'}</td>
+            <td class="small text-light font-monospace text-break">${escapeHtml(e.detail || '—')}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+
+      // Pagination Controls
+      const start = auditTotal === 0 ? 0 : auditOffset + 1;
+      const end = Math.min(auditOffset + entries.length, auditTotal);
+      paginationInfo.textContent = `Showing ${start}-${end} of ${auditTotal}`;
+
+      prevBtn.disabled = auditOffset <= 0;
+      nextBtn.disabled = auditOffset + auditLimit >= auditTotal;
+    } catch (err) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="text-center py-4 text-danger font-monospace small">
+            Failed to load audit trail: ${escapeHtml(err.message)}
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Actions & Mutation Handlers
+  // -------------------------------------------------------------
+
+  // Refresh entire dashboard
+  async function refreshDashboard(showToastFeedback = false) {
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) refreshBtn.disabled = true;
+
+    try {
+      await Promise.all([loadStatus(), loadKeys(), loadPolicy(), loadAudit()]);
+      if (showToastFeedback) {
+        showToast('KMS Dashboard refreshed.', 'info');
+      }
+    } catch (err) {
+      showToast(`Error refreshing: ${err.message}`, 'danger');
+    } finally {
+      if (refreshBtn) refreshBtn.disabled = false;
+    }
+  }
+
+  // Initialize KMS
+  async function handleInitializeKms() {
+    if (!confirm('Initialize the Key Management System and generate initial KEK v1?')) return;
+    try {
+      const res = await callApi('/api/kms/initialize', 'POST', {});
+      showToast(res.message || 'KMS initialized successfully.', 'success');
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    }
+  }
+
+  // Rotate KEK
+  async function handleRotateKek() {
+    const descInput = document.getElementById('rotateDescription');
+    const description = (descInput.value || '').trim() || 'Admin-triggered rotation';
+    const btn = document.getElementById('rotateKekBtn');
+
+    if (!confirm('Rotate the active Key Encryption Key? A new KEK version will be generated.')) {
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      const res = await callApi('/api/kms/rotate', 'POST', { description });
+      showToast(res.message || 'KEK rotated successfully.', 'success');
+      descInput.value = '';
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Rewrap All DEKs
+  async function handleRewrapAll() {
+    const btn = document.getElementById('rewrapDekBtn');
+    if (!confirm('Rewrap all data encryption keys (DEKs) under the current active KEK?')) {
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      const res = await callApi('/api/kms/rewrap', 'POST', {});
+      showToast(res.message || 'DEK rewrap completed.', 'success');
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Open Compromise Modal
+  function openCompromiseModal(version) {
+    targetCompromiseVersion = version;
+    document.getElementById('compromiseKekVersionLabel').textContent = `v${version}`;
+    document.getElementById('compromiseReason').value = '';
+    const modalEl = document.getElementById('compromiseModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+
+  // Submit Compromise
+  async function submitCompromise() {
+    if (!targetCompromiseVersion) return;
+    const reason = document.getElementById('compromiseReason').value.trim() || 'Admin declared compromise';
+    const btn = document.getElementById('confirmCompromiseBtn');
+
+    btn.disabled = true;
+    try {
+      const res = await callApi(`/api/kms/keys/${targetCompromiseVersion}/compromise`, 'POST', { reason });
+      showToast(res.message || `KEK v${targetCompromiseVersion} marked as compromised.`, 'danger');
+      const modalEl = document.getElementById('compromiseModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      targetCompromiseVersion = null;
+    }
+  }
+
+  // Recover KEK
+  async function handleRecoverKek(version) {
+    if (!confirm(`Are you sure you want to recover KEK v${version} from compromised status?`)) {
+      return;
+    }
+    try {
+      const res = await callApi(`/api/kms/keys/${version}/recover`, 'POST', {});
+      showToast(res.message || `KEK v${version} recovered.`, 'success');
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    }
+  }
+
+  // Destroy KEK
+  async function handleDestroyKek(version) {
+    const confirmation = prompt(`WARNING: Permanent destruction of KEK v${version} is IRREVERSIBLE.\nType "DESTROY" to confirm:`);
+    if (confirmation !== 'DESTROY') {
+      if (confirmation !== null) {
+        showToast('Destruction aborted: confirmation phrase mismatch.', 'warning');
+      }
+      return;
+    }
+    try {
+      const res = await callApi(`/api/kms/keys/${version}/destroy`, 'POST', {});
+      showToast(res.message || `KEK v${version} permanently destroyed.`, 'danger');
+      await refreshDashboard();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    }
+  }
+
+  // Save Rotation Policy
+  async function handleSavePolicy(event) {
+    event.preventDefault();
+    const interval = parseInt(document.getElementById('policyInterval').value, 10);
+    const maxVersions = parseInt(document.getElementById('policyMaxVersions').value, 10);
+    const autoRotate = document.getElementById('policyAutoRotate').checked;
+    const saveBtn = document.getElementById('savePolicyBtn');
+
+    saveBtn.disabled = true;
+    try {
+      const res = await callApi('/api/kms/policy', 'PUT', {
+        rotation_interval_days: interval,
+        max_versions: maxVersions,
+        auto_rotate: autoRotate
+      });
+      showToast(res.message || 'Rotation policy updated.', 'success');
+      await loadPolicy();
+      await loadStatus();
+      await loadAudit();
+    } catch (err) {
+      showToast(err.message, 'danger');
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  // Audit filter change
+  function handleAuditFilterChange() {
+    auditOffset = 0;
+    loadAudit();
+  }
+
+  // Audit pagination click
+  function handleAuditPage(delta) {
+    const newOffset = auditOffset + (delta * auditLimit);
+    if (newOffset >= 0 && newOffset < auditTotal) {
+      auditOffset = newOffset;
+      loadAudit();
+    }
+  }
+
+  // On page load
+  document.addEventListener('DOMContentLoaded', () => {
+    refreshDashboard();
+  });
+</script>
+{% endblock %}

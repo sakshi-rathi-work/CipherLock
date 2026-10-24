@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In{% endblock %}
+
+{% block content %}
+<div class="container py-5 my-md-4">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-lg border-secondary bg-dark text-white rounded-3">
+        <div class="card-header bg-secondary bg-opacity-25 py-3 border-secondary text-center">
+          <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Authentication</span>
+          <h3 class="fw-bold mb-0 mt-1">Sign in to CipherLock</h3>
+        </div>
+        <div class="card-body p-4">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} py-2 px-3 small mb-3">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
+
+          <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mb-3">
+              <label for="email" class="form-label text-light small">Email address</label>
+              <input type="email" class="form-control bg-dark text-white border-secondary font-monospace" id="email" name="email" value="{{ request.form.get('email', 'admin@cipherlock.local') }}" required autofocus>
+            </div>
+
+            <div class="mb-3">
+              <label for="password" class="form-label text-light small">Password</label>
+              <input type="password" class="form-control bg-dark text-white border-secondary font-monospace" id="password" name="password" value="AdminPass123!" required>
+            </div>
+
+            <div class="d-grid mt-4">
+              <button type="submit" class="btn btn-lime fw-semibold py-2">
+                Sign In
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer bg-secondary bg-opacity-10 py-3 border-secondary text-center text-secondary small">
+          Default Admin: <code class="text-lime">admin@cipherlock.local</code> | <code class="text-lime">AdminPass123!</code>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

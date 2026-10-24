@@ -48,11 +48,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     from routes.admin import admin_bp
     from routes.auth import auth_bp
     from routes.files import files_bp, files_web_bp
+    from routes.kms import kms_bp
     from routes.users import users_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(files_web_bp)
-    for blueprint in (files_bp, users_bp, admin_bp):
+    for blueprint in (files_bp, users_bp, admin_bp, kms_bp):
         app.register_blueprint(blueprint)
 
     @app.get("/")
@@ -96,6 +97,56 @@ def create_app(test_config: dict | None = None) -> Flask:
         response = jsonify({"csrf_token": token})
         response.headers["Cache-Control"] = "no-store"
         return response, 200
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        from flask import flash, redirect, render_template, request, session, url_for
+        if session.get("user_id"):
+            return redirect(request.args.get("next") or "/admin/kms")
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            from models.user import get_user_by_email, verify_password
+            user = get_user_by_email(email)
+            if user and verify_password(user["password_hash"], password) and user["is_active"]:
+                session.clear()
+                session["user_id"] = user["id"]
+                session["user_name"] = user["name"]
+                next_url = request.args.get("next") or ("/admin/kms" if user["is_admin"] else "/dashboard")
+                return redirect(next_url)
+            flash("Invalid email or password", "error")
+        return render_template("login.html")
+
+    @app.get("/logout")
+    def logout():
+        from flask import redirect, session
+        session.clear()
+        return redirect("/login")
+
+    @app.get("/admin/kms")
+    def kms_dashboard():
+        from flask import redirect, request, session as flask_session, url_for
+        user_id = flask_session.get("user_id")
+        if not user_id:
+            return redirect(url_for("login", next=request.path))
+        from models.user import get_user_by_id
+        user = get_user_by_id(user_id)
+        if not user:
+            flask_session.clear()
+            return redirect(url_for("login", next=request.path))
+        if not user["is_admin"]:
+            from flask import abort
+            abort(403)
+        return render_template("kms_dashboard.html", user=user)
+
+    # Bootstrap KMS schema and initial KEK on first start.
+    with app.app_context():
+        try:
+            from models.kms import ensure_kms_initialized
+            ensure_kms_initialized()
+        except Exception:
+            app.logger.warning("KMS auto-initialization deferred (DB may not be ready)")
+
 
     @app.errorhandler(400)
     def bad_request(error):

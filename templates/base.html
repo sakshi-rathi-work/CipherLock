@@ -19,7 +19,14 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
       <div class="collapse navbar-collapse" id="mainNav"><div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
         <a class="nav-link" href="{{ url_for('index') }}#security">Security goals</a>
-        {% if session.get('user_id') %}<a class="nav-link" href="{{ url_for('files_web.received_files_web') }}">Received Files</a><a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a><span class="nav-link text-light small">{{ session.get('user_name', 'Account') }}</span>{% else %}<a class="nav-link" href="{{ config.FRONTEND_URL }}/login">Sign in</a><a class="btn btn-lime btn-sm ms-lg-2" href="{{ config.FRONTEND_URL }}/register">Register</a>{% endif %}
+        {% if session.get('user_id') %}
+          <a class="nav-link" href="{{ url_for('kms_dashboard') }}"><span class="badge bg-lime font-monospace me-1">KMS</span> Dashboard</a>
+          <a class="nav-link" href="{{ url_for('files_web.received_files_web') }}">Received Files</a>
+          <span class="nav-link text-light small">{{ session.get('user_name', 'Account') }}</span>
+          <a class="btn btn-outline-secondary btn-sm ms-lg-2" href="{{ url_for('logout') }}">Sign out</a>
+        {% else %}
+          <a class="btn btn-lime btn-sm ms-lg-2" href="{{ url_for('login') }}">Sign in</a>
+        {% endif %}
       </div></div>
     </div>
   </nav>
