@@ -488,4 +488,4 @@ CipherLock/
 
 ## License
 
-Academic and educational project developed for the **Cryptography and Network Security** curriculum at Sardar Patel Institute of Technology (SPIT), Mumbai.
+Academic and educational project developed by team CipherLock for the **Cryptography and Network Security** curriculum at Sardar Patel Institute of Technology (SPIT), Mumbai.
