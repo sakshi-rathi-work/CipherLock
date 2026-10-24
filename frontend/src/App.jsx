@@ -15,6 +15,7 @@ import AdminPanel from "./pages/admin/AdminPanel";
 import SendFile from "./pages/SendFile";
 import SentFiles from "./pages/SentFiles";
 import ReceivedFiles from "./pages/ReceivedFiles";
+import SecurityStatus from "./pages/SecurityStatus";
 import Spinner from "./components/Spinner";
 
 function RootRedirect() {
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="/send" element={<ProtectedRoute><SendFile /></ProtectedRoute>} />
               <Route path="/sent" element={<ProtectedRoute><SentFiles /></ProtectedRoute>} />
               <Route path="/received" element={<ProtectedRoute><ReceivedFiles /></ProtectedRoute>} />
+              <Route path="/received/:id" element={<ProtectedRoute><SecurityStatus /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
               <Route
                 path="/dashboard"

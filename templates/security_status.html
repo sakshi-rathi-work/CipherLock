@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+
+{% block title %}Security Status · {{ file.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <!-- Page Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a href="{{ url_for('files_web.received_files_web') }}" class="text-lime text-decoration-none">Received Files</a></li>
+          <li class="breadcrumb-item active text-secondary" aria-current="page">Verification</li>
+        </ol>
+      </nav>
+      <h1 class="h2 fw-bold text-white mb-1 d-flex align-items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="#c4f16e" viewBox="0 0 16 16">
+          <path d="M5.338 1.59a61 61 0 0 0-2.837.856.48.48 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.7 10.7 0 0 0 2.287 2.233c.346.244.652.42.893.533q.18.085.293.134a.1.1 0 0 0 .101.006c.015-.006.087-.044.298-.154.244-.13.553-.31.901-.56a11 11 0 0 0 2.36-2.31c1.554-2.057 2.816-5.174 2.243-9.336a.48.48 0 0 0-.328-.39c-.656-.246-1.58-.597-2.612-.962C9.935 1.054 8.763.5 8 .5s-1.935.554-2.662 1.09"/>
+        </svg>
+        Verification Pipeline
+      </h1>
+      <p class="text-secondary small mb-0">Cryptographic audit of digital signatures, X.509 certificate trust, and payload integrity.</p>
+    </div>
+    <div>
+      <a href="{{ url_for('files_web.received_files_web') }}" class="btn btn-outline-secondary btn-sm font-monospace">
+        ← Back to Inbox
+      </a>
+    </div>
+  </div>
+
+  <!-- Overall Status Banner -->
+  {% if report.overall == 'TRUSTED' %}
+  <div class="alert alert-success border-0 shadow-sm d-flex align-items-center justify-content-between p-3 mb-4" style="background: rgba(46, 204, 113, 0.12); border-left: 5px solid #2ecc71 !important; color: #ffffff;">
+    <div class="d-flex align-items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#2ecc71" viewBox="0 0 16 16" class="flex-shrink-0">
+        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+      </svg>
+      <div>
+        <h5 class="fw-bold mb-0 text-white">STATUS: TRUSTED</h5>
+        <div class="small text-white-50">All cryptographic verification checks passed cleanly. The sender identity is verified and the encrypted file is intact.</div>
+      </div>
+    </div>
+    <span class="badge bg-success text-white px-3 py-2 font-monospace fs-6">TRUSTED</span>
+  </div>
+  {% else %}
+  <div class="alert alert-danger border-0 shadow-sm d-flex align-items-center justify-content-between p-3 mb-4" style="background: rgba(231, 76, 60, 0.15); border-left: 5px solid #e74c3c !important; color: #ffffff;">
+    <div class="d-flex align-items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#e74c3c" viewBox="0 0 16 16" class="flex-shrink-0">
+        <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+      </svg>
+      <div>
+        <h5 class="fw-bold mb-0 text-white">STATUS: {{ report.overall }}</h5>
+        <div class="small text-danger-emphasis">Signature verification failed. File may have been modified or sender authenticity could not be established.</div>
+      </div>
+    </div>
+    <span class="badge bg-danger text-white px-3 py-2 font-monospace fs-6">{{ report.overall }}</span>
+  </div>
+  {% endif %}
+
+  <!-- Sender Details Card -->
+  <div class="card bg-dark border border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Sender Provenance</span>
+      <span class="badge bg-dark border border-secondary text-secondary font-monospace small">File ID: #{{ file.id }}</span>
+    </div>
+    <div class="card-body p-3">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="text-secondary small">Sender Name</div>
+          <div class="fw-bold text-white">{{ sender.name }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-secondary small">Sender Email</div>
+          <div class="fw-semibold text-light font-monospace small">{{ sender.email }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-secondary small">X.509 Certificate Serial</div>
+          <div class="text-light font-monospace small text-break">{{ sender.serial_number }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-secondary small">Key Fingerprint (SHA-256)</div>
+          <div class="text-lime font-monospace small text-break">{{ sender.fingerprint }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three Large Security Panels -->
+  <div class="row g-4 mb-4">
+    <!-- Panel 1: Certificate -->
+    <div class="col-lg-4">
+      <div class="card h-100 bg-dark border {% if checks.certificate.status == 'VALID' %}border-success{% else %}border-danger{% endif %} shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-3 {% if checks.certificate.status == 'VALID' %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}">
+          <div class="d-flex align-items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="{% if checks.certificate.status == 'VALID' %}#2ecc71{% else %}#e74c3c{% endif %}" viewBox="0 0 16 16">
+              <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0m3.5 7.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5z"/>
+            </svg>
+            <span class="fw-bold text-white text-uppercase" style="letter-spacing: 0.05em;">Certificate</span>
+          </div>
+          {% if checks.certificate.status == 'VALID' %}
+            <span class="badge bg-success font-monospace px-2 py-1">VALID</span>
+          {% else %}
+            <span class="badge bg-danger font-monospace px-2 py-1">INVALID</span>
+          {% endif %}
+        </div>
+        <div class="card-body p-3">
+          <p class="text-secondary small mb-3">X.509 certificate chain, validity window, and revocation status check.</p>
+          <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">CipherLock Root CA signature</span>
+              {% if checks.certificate.ca_signature_ok %}
+                <span class="text-success fw-bold">✓ Valid</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Invalid</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Validity period (not expired)</span>
+              {% if checks.certificate.validity_ok %}
+                <span class="text-success fw-bold">✓ Valid</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Expired</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Revocation status</span>
+              {% if checks.certificate.not_revoked %}
+                <span class="text-success fw-bold">✓ Not Revoked</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Revoked</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Subject matches sender</span>
+              {% if checks.certificate.subject_ok %}
+                <span class="text-success fw-bold">✓ Matches</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Mismatch</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Key usage (digitalSignature)</span>
+              {% if checks.certificate.key_usage_ok %}
+                <span class="text-success fw-bold">✓ Valid</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Invalid</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between pt-1">
+              <span class="text-light">Header serial binding</span>
+              {% if checks.certificate.serial_matches %}
+                <span class="text-success fw-bold">✓ Matches</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Mismatch</span>
+              {% endif %}
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Signature -->
+    <div class="col-lg-4">
+      <div class="card h-100 bg-dark border {% if checks.signature.status == 'VALID' %}border-success{% else %}border-danger{% endif %} shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-3 {% if checks.signature.status == 'VALID' %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}">
+          <div class="d-flex align-items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="{% if checks.signature.status == 'VALID' %}#2ecc71{% else %}#e74c3c{% endif %}" viewBox="0 0 16 16">
+              <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+            </svg>
+            <span class="fw-bold text-white text-uppercase" style="letter-spacing: 0.05em;">Signature</span>
+          </div>
+          {% if checks.signature.status == 'VALID' %}
+            <span class="badge bg-success font-monospace px-2 py-1">VALID</span>
+          {% else %}
+            <span class="badge bg-danger font-monospace px-2 py-1">INVALID</span>
+          {% endif %}
+        </div>
+        <div class="card-body p-3">
+          <p class="text-secondary small mb-3">Sender non-repudiation and cryptographic header integrity check.</p>
+          <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">RSA-PSS digital signature</span>
+              {% if checks.signature.signature_ok %}
+                <span class="text-success fw-bold">✓ Valid</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Invalid</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">PSS parameters</span>
+              <span class="text-secondary font-monospace">SHA-256 / 32B salt</span>
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Canonical JSON header</span>
+              {% if checks.signature.canonical_header_ok %}
+                <span class="text-success fw-bold">✓ Matches</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Tampered</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between pt-1">
+              <span class="text-light">Sender key matching cert</span>
+              {% if checks.certificate.ca_signature_ok and checks.signature.signature_ok %}
+                <span class="text-success fw-bold">✓ Certified</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Unverified</span>
+              {% endif %}
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Integrity -->
+    <div class="col-lg-4">
+      <div class="card h-100 bg-dark border {% if checks.integrity.status == 'PASSED' %}border-success{% else %}border-danger{% endif %} shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-3 {% if checks.integrity.status == 'PASSED' %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}">
+          <div class="d-flex align-items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="{% if checks.integrity.status == 'PASSED' %}#2ecc71{% else %}#e74c3c{% endif %}" viewBox="0 0 16 16">
+              <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41m-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9"/>
+              <path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5 5 0 0 0 8 3M3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9z"/>
+            </svg>
+            <span class="fw-bold text-white text-uppercase" style="letter-spacing: 0.05em;">Integrity</span>
+          </div>
+          {% if checks.integrity.status == 'PASSED' %}
+            <span class="badge bg-success font-monospace px-2 py-1">PASSED</span>
+          {% else %}
+            <span class="badge bg-danger font-monospace px-2 py-1">FAILED</span>
+          {% endif %}
+        </div>
+        <div class="card-body p-3">
+          <p class="text-secondary small mb-3">Recomputed hash validation from raw ciphertext on disk.</p>
+          <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Recomputed SHA-256</span>
+              {% if checks.integrity.hash_matches %}
+                <span class="text-success fw-bold">✓ Matches</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Mismatch</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">Disk payload intact</span>
+              {% if checks.integrity.payload_intact %}
+                <span class="text-success fw-bold">✓ Intact</span>
+              {% else %}
+                <span class="text-danger fw-bold">✗ Corrupted</span>
+              {% endif %}
+            </li>
+            <li class="d-flex align-items-center justify-content-between border-bottom border-secondary pb-2">
+              <span class="text-light">AES-256-GCM 16B tag</span>
+              <span class="text-secondary font-monospace">Verified on open</span>
+            </li>
+            <li class="d-flex align-items-center justify-content-between pt-1">
+              <span class="text-light">Database vs Disk trust</span>
+              <span class="text-lime fw-bold">Disk-computed</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Required Monospace Security Box -->
+  <div class="card bg-dark border border-secondary mb-4 shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-2 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <span class="text-uppercase fw-semibold small text-lime" style="letter-spacing: 0.08em;">Official Security Audit Check Box</span>
+      <span class="text-secondary small font-monospace">crypto/package.py::format_security_box</span>
+    </div>
+    <div class="card-body p-3">
+      <pre class="bg-black text-lime p-3 rounded font-monospace mb-0 fs-6" style="border: 1px solid #2a4560; white-space: pre;">{{ security_box }}</pre>
+    </div>
+  </div>
+
+  <!-- Decrypt & Download Section -->
+  <div id="decrypt-section" class="card bg-dark border border-secondary shadow-lg">
+    <div class="card-header bg-secondary bg-opacity-25 py-3 px-4 border-secondary">
+      <h5 class="fw-bold text-white mb-0 d-flex align-items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#c4f16e" viewBox="0 0 16 16">
+          <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+        </svg>
+        Decryption & Retrieval
+      </h5>
+    </div>
+    <div class="card-body p-4">
+      {% if can_decrypt %}
+      <div class="row align-items-center g-4">
+        <div class="col-lg-7">
+          <p class="text-light mb-2">
+            Verification has established that this file is <strong>authentic</strong>, from <strong>{{ sender.name }}</strong>, and has <strong>not been tampered with</strong>.
+          </p>
+          <div class="alert alert-secondary border-0 p-3 small text-secondary font-monospace mb-0" style="background: rgba(255,255,255,0.03);">
+            <div class="text-lime fw-bold mb-1">Decryption Execution Steps:</div>
+            1. Authenticate your identity with your account password.<br>
+            2. Unlock your RSA-3072 private key in memory.<br>
+            3. Unwrap the 256-bit AES session key using RSA-OAEP.<br>
+            4. Decrypt the payload with AES-256-GCM and verify the 16-byte tag.<br>
+            5. Stream plaintext directly to your browser memory (never written to disk).
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <form method="POST" action="{{ url_for('files_web.download_file_web', file_id=file.id) }}" id="decryptForm" class="p-3 rounded border border-secondary" style="background: rgba(11,27,46,0.6);">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="mb-3">
+              <label for="passwordInput" class="form-label text-white fw-semibold small">
+                Enter Your Password to Decrypt:
+              </label>
+              <div class="input-group">
+                <input type="password"
+                       name="password"
+                       id="passwordInput"
+                       class="form-control bg-dark border-secondary text-white font-monospace"
+                       placeholder="Account password"
+                       required
+                       autocomplete="current-password" />
+                <button class="btn btn-outline-secondary" type="button" id="togglePasswordBtn" title="Toggle password visibility">
+                  👁
+                </button>
+              </div>
+              <div class="form-text text-secondary small" style="font-size: 0.75rem;">
+                Your private key is unlocked in memory only during this request and wiped immediately.
+              </div>
+            </div>
+
+            <button type="submit" id="downloadSubmitBtn" class="btn btn-lime w-100 py-2 fw-bold font-monospace d-flex align-items-center justify-content-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+              </svg>
+              <span>Decrypt & Download</span>
+            </button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div class="alert alert-danger border-0 d-flex align-items-center gap-3 p-3 mb-0" style="background: rgba(231, 76, 60, 0.15);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#e74c3c" viewBox="0 0 16 16" class="flex-shrink-0">
+          <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+          <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+        </svg>
+        <div>
+          <h6 class="fw-bold mb-1 text-white">Decryption Refused (Fail-Closed Enforcement)</h6>
+          <p class="mb-0 small text-danger-emphasis">
+            Signature verification failed. File may have been modified or sender authenticity could not be established.
+            Under CipherLock design decision <strong>D7</strong>, decryption is strictly prohibited when package trust cannot be guaranteed.
+          </p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

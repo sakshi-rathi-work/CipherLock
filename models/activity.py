@@ -24,6 +24,12 @@ VALID_ACTIONS = {
     "file_list_sent",
     "file_list_received",
     "file_access_denied",
+    # Phase 8 file verification and download events
+    "file_verify",
+    "file_verify_failed",
+    "file_download",
+    "file_download_failed",
+    "file_download_rejected",
 }
 
 

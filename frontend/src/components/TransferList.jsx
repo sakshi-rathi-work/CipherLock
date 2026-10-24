@@ -182,8 +182,16 @@ export default function TransferList({ mode }) {
                     <p>{formatTimestamp(item.created_at)}</p>
                     <p className="font-mono">{formatBytes(item.size_bytes)}</p>
                   </div>
-                  <div className="sm:w-44 sm:text-right">
+                  <div className="flex items-center gap-2 sm:justify-end">
                     <StatusPill status={item.status} mode={mode} />
+                    {!isSent && (
+                      <Link
+                        to={`/received/${item.id}`}
+                        className="btn-lime px-2.5 py-1 text-xs rounded font-mono font-medium hover:brightness-105"
+                      >
+                        {item.status === "verified" ? "Decrypt" : "Verify"}
+                      </Link>
+                    )}
                   </div>
                 </li>
               );

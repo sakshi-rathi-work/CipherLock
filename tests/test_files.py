@@ -846,11 +846,12 @@ def test_stats_endpoint_counts_for_the_current_user_only(ctx, bob):
 
 def test_activity_logging_is_meaningful_throttled_and_secret_free(ctx, alice, bob):
     quiet = ctx.new_user("auditor")
-    send(quiet["client"], b"audit me", bob["id"], "audit_secret_name.txt")
+    auditee = ctx.new_user("auditee")
+    send(quiet["client"], b"audit me", auditee["id"], "audit_secret_name.txt")
     send(quiet["client"], b"x", quiet["id"])             # rejected (self-send)
     for _ in range(3):                                   # throttled: one entry for repeated refreshes
         quiet["client"].get("/api/files/sent")
-        bob["client"].get("/api/files/received")
+        auditee["client"].get("/api/files/received")
     quiet["client"].get("/api/files/424242")
 
     rows = ctx.sql("SELECT action, detail FROM activity_log WHERE user_id = ?", (quiet["id"],))
@@ -859,7 +860,7 @@ def test_activity_logging_is_meaningful_throttled_and_secret_free(ctx, alice, bo
     assert actions.count("file_upload_failed") == 1
     assert actions.count("file_list_sent") == 1
     assert actions.count("file_access_denied") == 1
-    assert len(ctx.activity(bob["id"], "file_list_received")) == 1
+    assert len(ctx.activity(auditee["id"], "file_list_received")) == 1
     joined = " ".join(f"{r['action']} {r['detail']}" for r in rows)
     for secret in ("audit_secret_name", "audit me", PASSWORD, "PRIVATE KEY"):
         assert secret not in joined

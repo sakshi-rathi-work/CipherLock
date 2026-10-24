@@ -9,13 +9,13 @@
 
 ## Executive Status Dashboard
 
-- **Current Phase:** Phase 8 — Receiver Workflow, Security Status and Decryption (next to implement)
+- **Current Phase:** Phase 9 — Attack Demonstrations and Admin Completion (next to implement)
 - **Overall Project Status:** IN_PROGRESS
-- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7
+- **Completed Phases:** Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7, Phase 8
 - **Current Blockers:** None
-- **Last Updated:** 2026-10-10
-- **Last Verified Test State:** `python -m pytest` → 154 passed; `python scripts/e2e_cli.py` → 9/9 PASS; `cd frontend && npm run build` → success
-- **Next Developer's Task:** Implement Phase 8 — read **`Phase 7 → Phase 8 Handoff`** (before the Developer Handoff Tracking Ledger) first.
+- **Last Updated:** 2026-10-24
+- **Last Verified Test State:** `python -m pytest` → 158 passed, 2 skipped (100% green); `python -m pytest tests/test_flow.py` → 6/6 passed; `python scripts/e2e_cli.py` → 9/9 PASS; `cd frontend && npm run build` → built in 22s
+- **Next Developer's Task:** Implement Phase 9 — read **`Phase 8 → Phase 9 Handoff`** first.
 
 ---
 
@@ -566,41 +566,52 @@ Mutation checks performed manually (not committed): disabling `InMemoryUploadReq
 
 - **Objective:** Construct the receiver verification pipeline, detailed Security Status UI (featuring Certificate, Signature, and Integrity panels along with the monospace security check box), and streaming in-memory decryption upon successful verification.
 - **Assigned Developer / Phase Owner:** Developer 8 (Agent 8)
-- **Status:** `NOT_STARTED`
+- **Status:** `COMPLETE`
 - **Dependencies:** Phase 1 through Phase 7
 - **Adjustments made by Phase 7 (read before starting):** `GET /api/files/received` and `GET /api/files/<id>` **already exist** (listing/metadata only) and `ReceivedFiles.jsx` + `TransferList.jsx` already exist — extend them rather than recreating. Key unlocking does not use the user's password (see handoff). See **`Phase 7 → Phase 8 Handoff`** for exact function names.
-- **Files to Create / Modify:**
-  - **Backend:**
-    - `backend/routes/files.py` (add `/<id>/verify`, `/<id>/download`; `/received` already done)
-    - `backend/tests/test_flow.py`
-  - **Frontend:**
+- **Files Created / Modified:**
+  - **Backend & Templates:**
+    - `routes/files.py` (added `/<id>/verify` and `/<id>/download` for both API and server-rendered HTML; `files_web_bp`)
+    - `models/file.py` (added `STATUS_VERIFIED`, `STATUS_FAILED`, and `update_status`)
+    - `models/activity.py` (added Phase 8 audit action types)
+    - `app.py` (registered `files_web_bp`, `/dashboard` web route)
+    - `templates/security_status.html` (3-panel verification UI, monospace check box, decrypt form)
+    - `templates/received_files.html` (secure inbox with status badges)
+    - `templates/dashboard.html` (dashboard with received table and audit list)
+    - `templates/partials/status_badge.html` (reusable badge macro)
+    - `static/js/app.js` (password toggle, form submit spinners, confirm dialogs)
+    - `tests/test_flow.py` (6 end-to-end integration tests)
+  - **Frontend SPA:**
     - `frontend/src/components/StatusBadge.jsx` (Status badge component)
     - `frontend/src/components/SecurityPanel.jsx` (Panels for Certificate, Signature, Integrity checks)
     - `frontend/src/components/SecurityBox.jsx` (Monospace security status terminal box)
-    - `frontend/src/pages/ReceivedFiles.jsx` (Received files list page)
+    - `frontend/src/pages/ReceivedFiles.jsx` (Received files list page with verify/decrypt actions)
     - `frontend/src/pages/SecurityStatus.jsx` (Security status dashboard with decrypt form)
+    - `frontend/src/components/TransferList.jsx` (Added Verify and Decrypt links)
+    - `frontend/src/utils/files.js` (Added verified/failed status helpers)
+    - `frontend/src/App.jsx` (Added `/received/:id` route)
 - **Main Implementation Tasks:**
-  1. Implement `GET /api/files/received` returning files received by logged-in user.
-  2. Implement `GET /api/files/<id>/verify`: verify authorization (receiver only), rebuild package from DB + stored `.bin`, execute `verify_package()` with expected sender email, record result in DB, return detailed `SecurityReport` JSON.
-  3. Implement `POST /api/files/<id>/download` (requires password): **re-run `verify_package()` unconditionally**. If overall status == `TRUSTED`, load receiver private key with password, execute `open_package()`, and stream plaintext directly from memory using Flask `send_file(BytesIO(...))` with headers `Cache-Control: no-store` and `Content-Disposition`. If verification fails, return 400 JSON with exact message: *"Signature verification failed. File may have been modified or sender authenticity could not be established."*
-  4. Build React components: `ReceivedFiles.jsx`, `SecurityStatus.jsx` (3 major panels, checklist items, monospace `SecurityBox`, Decrypt form active only when `TRUSTED`).
+  1. Implement `GET /api/files/received` returning files received by logged-in user with status badges. (`COMPLETED`)
+  2. Implement `GET /files/<id>/verify` and `GET /api/files/<id>/verify`: verify authorization (receiver only), rebuild package from DB + stored `.bin`, execute `verify_package()` with expected sender email, record result in DB (`verified` or `failed`), return detailed `SecurityReport`. (`COMPLETED`)
+  3. Implement `POST /files/<id>/download` and `POST /api/files/<id>/download`: re-authenticate receiver with password, **re-run `verify_package()` unconditionally**. If overall status == `TRUSTED`, load receiver private key in memory, execute `open_package()`, and stream plaintext directly from memory using Flask `send_file(BytesIO(...))` with headers `Cache-Control: no-store` and `Content-Disposition`. If verification fails, refuse decryption and return exact message: *"Signature verification failed. File may have been modified or sender authenticity could not be established."* (`COMPLETED`)
+  4. Build UI: server-rendered Jinja2 templates (`security_status.html`, `received_files.html`, `dashboard.html`) and React SPA components (`ReceivedFiles.jsx`, `SecurityStatus.jsx` with 3 major panels, checklist items, monospace `SecurityBox`, Decrypt form active only when `TRUSTED`). (`COMPLETED`)
 - **APIs / Modules / Contracts Involved:**
-  - `GET /api/files/received` $\rightarrow$ `[{"id": 1, "original_filename": "...", "sender_name": "...", "sender_email": "...", "created_at": "...", "status": "..."}]`
-  - `GET /api/files/<id>/verify` $\rightarrow$ `{"report": {"certificate": "VALID", "signature": "VALID", "integrity": "PASSED", "overall": "TRUSTED", "messages": [...]}, "sender": {...}}`
-  - `POST /api/files/<id>/download` (JSON body: `{"password": "..."}`) $\rightarrow$ Binary file stream with `Cache-Control: no-store`.
+  - `GET /received` & `GET /api/files/received` $\rightarrow$ Lists incoming transfers with status badges
+  - `GET /files/<id>/verify` & `GET /api/files/<id>/verify` $\rightarrow$ Evaluates certificate, signature, and integrity; renders Security Status screen or returns `SecurityReport` JSON
+  - `POST /files/<id>/download` & `POST /api/files/<id>/download` (with password) $\rightarrow$ In-memory decrypted binary stream with `Cache-Control: no-store`
 - **Security Requirements:**
   - Fail-closed enforcement: Decryption executes ONLY IF package verification yields `TRUSTED`.
   - Mandatory verification re-execution on every download call (never trust prior stored status alone).
   - Memory-only streaming (`BytesIO`); plaintext never touches disk or local temp files.
   - HTTP header `Cache-Control: no-store` set on file download responses.
 - **Tests Required:**
-  - Run `pytest backend/tests/test_flow.py` (happy path end-to-end download verification, hash matching original, third-party 404 attempt, wrong password refusal, tampered `.bin` download refusal with exact failure message, sender download refusal).
+  - Run `pytest tests/test_flow.py` (happy path end-to-end download verification, hash matching original, third-party 404 attempt, wrong password refusal, tampered `.bin` download refusal with exact failure message, sender download refusal). (`6/6 PASSED`)
 - **Acceptance Criteria:**
-  - Recipient Vidhi verifies file from Siddharth in React UI (all green panels & `TRUSTED` box).
-  - Entering password decrypts and downloads file.
-  - Downloaded file SHA-256 hash matches original upload file SHA-256 hash.
+  - Recipient verifies file from sender in UI (all green panels & `TRUSTED` box). (`VERIFIED`)
+  - Entering password decrypts and downloads file. (`VERIFIED`)
+  - Downloaded file SHA-256 hash matches original upload file SHA-256 hash. (`VERIFIED`)
 - **Handoff Notes for Next Developer:**
-  - *To be updated by Developer 8 upon phase completion.*
+  - Detailed handoff notes recorded below under **`Phase 8 Handoff Notes`** and **`Phase 8 → Phase 9 Handoff`**.
 
 ---
 
@@ -768,7 +779,7 @@ Reuse the existing pieces; do not rewrite crypto.
 | **Phase 5** | Developer 5 (Agent 5) | `COMPLETE` | 2026-10-09 | 66 passed (cumulative) | RSA-OAEP wrap/unwrap, RSA-PSS sign/verify, `scripts/demo_wrap_sign.py`, `tests/test_wrap.py`, `tests/test_signatures.py` |
 | **Phase 6** | Developer 6 (Agent 6) | `COMPLETE` | 2026-10-10 | 76 passed (cumulative) | `crypto/package.py`, `scripts/e2e_cli.py` (9/9 attacks), `tests/test_package.py` |
 | **Phase 7** | Developer 7 (Agent 7) | `COMPLETE` | 2026-10-10 | 154 passed (cumulative; 78 new) | Secure upload/storage/sharing API, additive `files` migration, `models/file.py`, `models/storage.py`, `/send` `/sent` `/received` UI, dashboard counts, `tests/test_files.py`; CLI 9/9; frontend build OK |
-| **Phase 8** | Developer 8 (Agent 8) | `NOT_STARTED` | — | — | Pending Phase 8 execution |
+| **Phase 8** | Developer 8 (Agent 8) | `COMPLETE` | 2026-10-24 | 158 passed (cumulative; 6 new) | Full receiver verification pipeline, Security Status UI, 3 panels (Certificate, Signature, Integrity), monospace security check box, memory-only decrypted download, tests/test_flow.py, React SecurityStatus page |
 | **Phase 9** | Developer 9 (Agent 9) | `NOT_STARTED` | — | — | Pending Phase 9 execution |
 | **Phase 10** | Developer 10 (Agent 10) | `NOT_STARTED` | — | — | Pending Phase 10 execution |
 
@@ -948,7 +959,78 @@ Phase 4 is complete. Phase 5 can consume `users.public_key`, `users.certificate`
 *Status: COMPLETE — 2026-10-10.* Full details: the Phase 7 blueprint section above and **`Phase 7 → Phase 8 Handoff`**. Summary: upload encrypts/wraps/signs via the unchanged `build_package()`, stores only `<uuid4>.bin` ciphertext (atomic, 0600) plus metadata in the migrated `files` table; sent/received/metadata endpoints are participant-scoped; 154 backend tests, CLI 9/9 and the frontend build pass. Key caveats: orphan-ciphertext cleanup, `cert_serial` JSON precision, no decrypt/download yet.
 
 ### Phase 8 Handoff Notes
-*Status: Pending*
+*Status: COMPLETE — 2026-10-24*
+
+**Implemented by:** Developer 8 (Agent 8)
+
+**What was built:**
+- **Receiver Workflow & Verification Endpoints (`routes/files.py`):**
+  - `GET /received`: server-rendered HTML listing of received files with provenance and status badges.
+  - `GET /files/<int:file_id>/verify` & `GET /api/files/<int:file_id>/verify`: receiver-scoped verification endpoint (returns 404 for unauthorized users or senders; fail closed). Rebuilds package from DB record plus raw stored `.bin` payload (`file_model.reconstruct_package`). Runs full `verify_package` checking X.509 certificate trust (CA signature, validity dates, revocation status in DB, subject email match, KeyUsage), canonical header RSA-PSS digital signature, and recomputed SHA-256 digest from disk. Saves outcome (`verified` or `failed`) to `files.status` and logs audit entry. Renders `security_status.html` or returns structured JSON report.
+  - `POST /files/<int:file_id>/download` & `POST /api/files/<int:file_id>/download`: re-authenticates the receiver via their account password, **unconditionally re-verifies package trust before decryption** (never trusts prior stored status alone). Only if `report.overall == "TRUSTED"`, loads receiver's RSA-3072 private key in-memory via `unprotect_private_key`, unwraps session key with RSA-OAEP, authenticates and decrypts payload with AES-256-GCM (`open_package`), and streams plaintext directly from memory using `send_file(io.BytesIO(plaintext))` with `Cache-Control: no-store` and `Pragma: no-cache`. Plaintext is never written to disk or temporary files.
+  - Explicit fail-closed rejection: on any verification failure, returns exact message: *"Signature verification failed. File may have been modified or sender authenticity could not be established."* and decrypts nothing. Catches `TamperError`, `UnwrapError`, and `DecryptionError` with distinct, safe messages.
+- **Server-Rendered UI Templates (`templates/`):**
+  - `templates/security_status.html`: 3 large status panels (CERTIFICATE, SIGNATURE, INTEGRITY) with green/red badges and check items; sender provenance box; monospace audit terminal box reproducing the required `CIPHERLOCK SECURITY CHECK` ASCII box; and Decrypt & Download form (active only when overall is `TRUSTED`).
+  - `templates/received_files.html`: secure inbox view with filename, sender, timestamp, and status badges.
+  - `templates/partials/status_badge.html`: reusable status badge macro for `pending`, `verified`, and `failed`.
+  - `templates/dashboard.html`: dashboard with received files table and audit activity list.
+  - `static/js/app.js`: password visibility toggle, confirm dialogs, and form submit loading spinners.
+- **Frontend SPA Components (`frontend/src/`):**
+  - `frontend/src/components/StatusBadge.jsx`: status badge component.
+  - `frontend/src/components/SecurityBox.jsx`: monospace terminal box component.
+  - `frontend/src/components/SecurityPanel.jsx`: 3 verification panels component.
+  - `frontend/src/pages/SecurityStatus.jsx`: full React verification & decryption page.
+  - `frontend/src/components/TransferList.jsx` & `frontend/src/pages/ReceivedFiles.jsx`: added Verify and Decrypt links.
+  - `frontend/src/utils/files.js`: added `verified` and `failed` status descriptions.
+  - `frontend/src/App.jsx`: registered `/received/:id` route for `SecurityStatus`.
+- **Database & Models:**
+  - `models/file.py`: added `STATUS_VERIFIED = "verified"`, `STATUS_FAILED = "failed"`, `update_status(file_id, status)`.
+  - `models/activity.py`: added Phase 8 events (`file_verify`, `file_verify_failed`, `file_download`, `file_download_failed`, `file_download_rejected`) to `VALID_ACTIONS`.
+- **Automated Tests (`tests/test_flow.py`):**
+  - 6 exhaustive end-to-end tests covering:
+    1. Happy path: A -> B upload, B verifies (TRUSTED, files.status='verified'), B enters password, downloads identical plaintext byte-for-byte; asserts `Cache-Control: no-store`.
+    2. Unauthorized user C gets 404 on verify and download of A->B's file.
+    3. Wrong password blocks download (401 error, no plaintext).
+    4. Tampered ciphertext: flipping 1 byte in stored `.bin` causes verify to show Signature INVALID / Integrity FAILED, and download is refused with exact message: *"Signature verification failed. File may have been modified or sender authenticity could not be established."*.
+    5. Sender cannot download their own file (404).
+    6. Revoked sender certificate causes verification failure (`UNTRUSTED SENDER`) and download block.
+
+**Verification results:**
+- `python -m pytest` → **158 passed, 2 skipped, 0 failed** in ~172 s.
+- `python -m pytest tests/test_flow.py -v` → **6 passed, 0 failed** in ~19 s.
+- `python scripts/e2e_cli.py` → **PASS — 9/9 attack cases matched**.
+- `cd frontend && npm run build` → **Built in 22s cleanly** (1664 modules transformed).
+
+---
+
+## Phase 8 → Phase 9 Handoff
+
+*Written by Developer 8 (Agent 8), 2026-10-24.*
+
+### 1. Current Implementation State
+- Full file-sharing lifecycle is operational: User registration $\rightarrow$ RSA-3072 keygen $\rightarrow$ Mini CA X.509 cert issuance $\rightarrow$ AES-256-GCM upload + RSA-OAEP wrap + RSA-PSS sign $\rightarrow$ participant listing $\rightarrow$ fail-closed receiver verification $\rightarrow$ in-memory decrypted download with password re-authentication.
+- All 158 tests passing. CLI demo 9/9 attacks pass. React frontend builds cleanly.
+
+### 2. Phase 9 Developer Tasks (Attack Demonstrations & Admin Completion)
+1. **Interactive Attacker Simulation Lab (`routes/admin.py` & `templates/admin_lab.html` / `AttackLab.jsx`):**
+   - Restricted to `admin_required` AND `DEMO_MODE=1` in config (404 otherwise).
+   - Implement simulated attack endpoints:
+     - Tamper ciphertext: backup `.bin` to `storage/backup/<id>.bin`, flip 1 byte in stored ciphertext.
+     - Tamper metadata: alter `original_filename` in DB.
+     - Tamper signature: overwrite `signature` BLOB with random bytes.
+     - Swap certificate: swap `sender_certificate` with a rogue CA certificate.
+     - Restore original: restore stored `.bin` and DB fields from backup.
+   - All simulated attacks must be logged in `activity_log` with detail `SIMULATED ATTACK`.
+2. **Stolen Data Analysis Screen (`StolenData.jsx`):**
+   - Shows attacker trial decryption failures (random key, attacker RSA key, sender public key) and explanations of $2^{256}$ brute-force impossibility.
+3. **CLI Attack Scripts:**
+   - `scripts/demo_tamper.py`
+   - `scripts/demo_unauthorized.py`
+   - `scripts/demo_revocation.py`
+4. **Complete Admin Management:**
+   - User active state toggle (`/api/admin/users/<id>/toggle-active`), certificate filtering, certificate revocation, searchable activity audit trail.
+5. **Tests:**
+   - Write `tests/test_attacks.py` asserting all attack scenarios and restore functionality.
 
 ### Phase 9 Handoff Notes
 *Status: Pending*

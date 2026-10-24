@@ -1,0 +1,27 @@
+{# Reusable status badge macro for CipherLock files (Phase 8) #}
+{% macro render_status_badge(status) %}
+  {% if status == 'verified' %}
+    <span class="badge bg-success text-white px-2 py-1 d-inline-flex align-items-center gap-1 font-monospace" style="font-size: 0.8rem; letter-spacing: 0.03em;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M10.067.87a2.89 2.89 0 0 0-4.134 0l-.622.638-.89-.011a2.89 2.89 0 0 0-2.924 2.924l.01.89-.636.622a2.89 2.89 0 0 0 0 4.134l.637.622-.011.89a2.89 2.89 0 0 0 2.924 2.924l.89-.01.622.636a2.89 2.89 0 0 0 4.134 0l.622-.637.89.011a2.89 2.89 0 0 0 2.924-2.924l-.01-.89.636-.622a2.89 2.89 0 0 0 0-4.134l-.637-.622.011-.89a2.89 2.89 0 0 0-2.924-2.924l-.89.01zm.354 3.854a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7 7.293l2.646-2.647a.5.5 0 0 1 .708 0"/>
+      </svg>
+      VERIFIED
+    </span>
+  {% elif status == 'failed' %}
+    <span class="badge bg-danger text-white px-2 py-1 d-inline-flex align-items-center gap-1 font-monospace" style="font-size: 0.8rem; letter-spacing: 0.03em;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+      </svg>
+      FAILED
+    </span>
+  {% else %}
+    <span class="badge bg-warning text-dark px-2 py-1 d-inline-flex align-items-center gap-1 font-monospace" style="font-size: 0.8rem; letter-spacing: 0.03em;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71z"/>
+        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0"/>
+      </svg>
+      PENDING
+    </span>
+  {% endif %}
+{% endmacro %}

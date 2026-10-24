@@ -50,12 +50,17 @@ export function fileIconFor(filename = "") {
   return match ? ICON_COMPONENTS[match[0]] : File;
 }
 
-// Delivery status as stored by the backend ("pending" is the only Phase 7 value).
 export function describeStatus(status, mode) {
   if (status === "pending") {
     return mode === "received"
-      ? { label: "Awaiting verification", tone: "amber", hint: "Stored encrypted. Verification and decryption are not available yet." }
+      ? { label: "Awaiting verification", tone: "amber", hint: "Stored encrypted. Run verification to validate signature and integrity." }
       : { label: "Delivered", tone: "emerald", hint: "Encrypted, signed and stored for the recipient. Not yet verified by them." };
+  }
+  if (status === "verified") {
+    return { label: "Verified", tone: "emerald", hint: "Cryptographic signature and certificates successfully verified." };
+  }
+  if (status === "failed") {
+    return { label: "Verification failed", tone: "rose", hint: "Signature verification or integrity check failed." };
   }
   const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown";
   return { label, tone: "slate", hint: "" };

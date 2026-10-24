@@ -19,8 +19,7 @@ export default function ReceivedFiles() {
       <div className="alert alert-info mb-6 shadow-card">
         <Info className="w-4 h-4 mt-0.5 text-lime-dark flex-shrink-0" aria-hidden="true" />
         <p>
-          Your files are stored encrypted on the server. Signature verification, decryption and download are
-          not available yet, so entries show as awaiting verification.
+          Files are encrypted with your RSA-3072 public key. Click <strong>Verify</strong> on any file to run the full cryptographic pipeline (X.509 validity, RSA-PSS signature, SHA-256 integrity) before unlocking and decrypting.
         </p>
       </div>
       <TransferList mode="received" />

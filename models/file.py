@@ -32,6 +32,26 @@ from models import storage
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 STATUS_PENDING = "pending"
+STATUS_VERIFIED = "verified"
+STATUS_FAILED = "failed"
+VALID_STATUSES = {STATUS_PENDING, STATUS_VERIFIED, STATUS_FAILED}
+
+
+def update_status(file_id: int, status: str, commit: bool = True) -> bool:
+    """Update the verification status of a file record.
+    
+    Allowed statuses: 'pending', 'verified', 'failed'.
+    """
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid file status: {status}")
+    db = get_db()
+    cursor = db.execute(
+        "UPDATE files SET status = ? WHERE id = ?",
+        (status, file_id),
+    )
+    if commit:
+        db.commit()
+    return cursor.rowcount > 0
 
 # Fields never selected for listings: wrapped key, nonce, signature, certificate.
 _LIST_COLUMNS = """

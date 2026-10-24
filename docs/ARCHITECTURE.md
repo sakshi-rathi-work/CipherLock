@@ -1,226 +1,193 @@
 # CipherLock – System Architecture
 
-> **Status:** Phase 3 Complete (AES-GCM and protected RSA keys)
-> **Last updated:** 2026-10-08
+> **Status:** Phase 8 Complete (Receiver Workflow, Security Status UI, and In-Memory Decryption)  
+> **Last updated:** 2026-10-24  
 
-This document describes the structural and design decisions of CipherLock.
-Phase 1 established the application foundation and SQLite schema.
-Phase 2 introduced authentication, scrypt password hashing, brute-force lockout,
-session management, and the React 18 + Vite + Tailwind v3 SPA (`frontend/`).
-Phase 3 adds AES-256-GCM primitives and RSA-3072 user-key provisioning.
+This document describes the structural and cryptographic architecture of CipherLock.
+CipherLock is a secure file storage and sharing web application designed with fail-closed security guarantees: confidentiality (AES-256-GCM), integrity and non-repudiation (RSA-PSS digital signatures over canonical JSON headers), sender authentication and authorization (X.509 PKI certificates issued by an internal Root CA), and recipient key protection (RSA-OAEP session-key wrapping).
 
 ```
 Browser ──HTTP──► Flask app (app.py) ◄── Vite Proxy (/api) ◄── React SPA (frontend/)
                      │
-                     ├── config.py          (environment-backed settings)
-                     ├── routes/auth.py     (/api/auth: register, login, logout, me, activity)
-                     ├── models/user.py     (scrypt hashing, user CRUD, password policy)
-                     ├── models/activity.py (security audit log)
-                     ├── models/lockout.py  (in-memory brute-force lockout: 5 fails / 300s)
-                     ├── models/provisioning.py (transactional user-key provisioning)
-                     ├── crypto/aes.py      (AES-256-GCM byte encryption)
-                     ├── crypto/rsa.py      (RSA-3072 generation and PEM serialization)
-                     ├── crypto/key_storage.py (versioned AES-GCM private-key envelope)
-                     ├── database/db.py     (SQLite helpers with PRAGMA foreign_keys)
-                     ├── database/schema.sql
-                     └── templates/         (Phase 1 server-rendered Jinja2 landing)
+                     ├── config.py             (Environment-backed settings, paths, limits)
+                     ├── routes/auth.py        (/api/auth: register, login, logout, me, activity)
+                     ├── routes/files.py       (/api/files + web: upload, sent, received, verify, download)
+                     ├── routes/users.py       (/api/users: directory, certificate inspection)
+                     ├── routes/admin.py       (/api/admin: CA info, certificate management, revocation)
+                     ├── models/user.py        (scrypt hashing, user CRUD, password policy, envelope lookup)
+                     ├── models/file.py        (transfer CRUD, status management, package reconstruction)
+                     ├── models/activity.py    (audit trail with throttled read logging)
+                     ├── models/lockout.py     (in-memory brute-force lockout: 5 failures / 300s)
+                     ├── models/provisioning.py (atomic user keygen and X.509 cert issuance)
+                     ├── models/storage.py     (safe UUID binary payload storage, O_EXCL, fsync)
+                     ├── crypto/aes.py         (AES-256-GCM authenticated encryption/decryption)
+                     ├── crypto/rsa.py         (RSA-3072 keygen, RSA-OAEP wrapping/unwrapping)
+                     ├── crypto/signatures.py  (RSA-PSS SHA-256 signing/verification)
+                     ├── crypto/ca.py          (Root CA generation, user certificate issuance, revocation)
+                     ├── crypto/certificates.py(X.509 certificate validation and CertReport)
+                     ├── crypto/package.py     (canonical JSON header, hybrid package build, verify, open)
+                     ├── crypto/key_storage.py (AES-GCM user private-key envelope bound to user ID)
+                     ├── database/db.py        (SQLite connection lifecycle, migrations)
+                     ├── database/schema.sql   (users, files, certificates, activity_log)
+                     ├── templates/            (Jinja2 templates: base, index, security_status, received_files, dashboard)
+                     └── frontend/src/         (React 18 + Vite + Tailwind v3 SPA)
 ```
 
 ---
 
-## Application Factory
+## Application Factory (`app.py`)
 
-`app.py` uses the **application factory pattern** (`create_app`).  This
-pattern is recommended by Flask because it:
+`app.py` uses the **Flask application factory pattern** (`create_app`), enhanced with an in-memory upload stream handler:
 
-- Allows multiple application instances with different configurations to
-  coexist in the same process (critical for test isolation).
-- Defers extension initialisation until the factory is called, which prevents
-  circular imports.
-- Makes it straightforward to pass a `test_config` dict during testing without
-  touching environment variables.
+- **`InMemoryUploadRequest`**: Overrides Werkzeug's `_get_file_stream` to buffer multipart uploads directly into `io.BytesIO` up to `MAX_CONTENT_LENGTH` (25 MiB). This strictly enforces design decision **D8**: plaintext files are never written to `/tmp` or server disk.
+- **Directory Initialization**: Automatically ensures `storage/encrypted/`, `certificates/ca/`, `certificates/users/`, `keys/ca/`, and `keys/users/` exist with appropriate permissions.
+- **Database Initialization**: Runs idempotent schema creation and additive migrations (`migrate_files_table`).
+- **CSRF Protection**: `CSRFProtect` active on all state-mutating requests, supported by `GET /api/csrf-token` with `Cache-Control: no-store`.
+- **Blueprint Registration**: Registers `auth_bp`, `files_bp`, `files_web_bp`, `users_bp`, and `admin_bp`.
+- **Scoped Error Handlers**: Returns JSON error shapes for `/api/*` requests while rendering friendly HTML error pages (`403.html`, `404.html`, `413.html`) for browser routes.
 
-```
-create_app(test_config=None)
-  │
-  ├── app.config.from_object(Config)      # load settings
-  ├── [create runtime directories]        # storage, certs, keys
-  ├── init_db(...)                        # create tables if absent
-  ├── csrf.init_app(app)                  # CSRF protection
-  ├── app.teardown_appcontext(close_db)   # connection lifecycle
-  └── app.register_blueprint(...)  ×4    # auth, files, users, admin
+---
+
+## Cryptographic Design Decisions (D1–D8)
+
+CipherLock adheres to eight immutable cryptographic rules:
+
+1. **D1 — Hybrid Encryption Standard**: AES-256-GCM encrypts files; RSA-OAEP (SHA-256, MGF1-SHA-256) wraps the AES key; RSA-PSS (SHA-256, 32-byte salt) signs the canonical package header. RSA never encrypts files directly.
+2. **D2 — RSA Key Pairs**: Each user has one RSA-3072 key pair; X.509 `KeyUsage` = `digitalSignature` + `keyEncipherment`.
+3. **D3 — Private Key Protection at Rest**: User private keys are protected as encrypted PKCS#8 envelopes using HKDF-SHA256 derived keys from Flask's `SECRET_KEY` and bound to the user ID. The user's account password re-authenticates the user prior to in-memory decryption. Keys are never logged, stored in sessions, or exposed via API.
+4. **D4 — Mini Public Key Infrastructure (PKI)**: Self-signed Root CA (RSA-4096, 10-year validity, `BasicConstraints ca=True`, `KeyUsage keyCertSign+cRLSign`). User certificates are issued for 1 year with unique serial numbers, `CN=name`, `emailAddress=email`, SAN email, and database-tracked revocation status.
+5. **D5 — AES-GCM File Encryption**: Fresh random 32-byte session key and random 12-byte nonce generated for every upload. Stored format = `ciphertext || 16-byte GCM tag`. Canonical header metadata is authenticated as Additional Authenticated Data (AAD).
+6. **D6 — Canonical Signed Header**: JSON sorted keys, compact separators, UTF-8 encoded:
+   `{"ciphertext_sha256_hex": "...", "nonce_b64": "...", "original_filename": "...", "receiver_id": ..., "sender_cert_serial": ..., "sender_id": ..., "version": 1, "wrapped_key_b64": "..."}`
+   At verification, `ciphertext_sha256_hex` is **always recomputed from the disk file**, never trusted from database fields.
+7. **D7 — Receiver Pipeline (Fail-Closed)**: 
+   Authorization $\rightarrow$ X.509 Certificate Validation (CA signature, validity dates, revocation status, subject match) $\rightarrow$ RSA-PSS Signature Verification $\rightarrow$ **Only Then** RSA-OAEP Key Unwrap $\rightarrow$ AES-GCM In-Memory Decryption. If any step fails, return exact message:
+   *"Signature verification failed. File may have been modified or sender authenticity could not be established."* and **never decrypt**.
+8. **D8 — File Storage Constraints**: Max 25 MB per file, `secure_filename`, stored under random UUID `<uuid4>.bin` in `storage/encrypted/`. Plaintext is **never** written to disk.
+
+---
+
+## Database Layer (`database/`)
+
+SQLite 3 with `PRAGMA foreign_keys = ON` manages application state across 4 tables:
+
+```sql
+-- Core schemas (database/schema.sql)
+users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    password_hash TEXT,
+    public_key BLOB,
+    encrypted_private_key BLOB,
+    certificate BLOB,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL REFERENCES users(id),
+    receiver_id INTEGER NOT NULL REFERENCES users(id),
+    original_filename TEXT NOT NULL,
+    encrypted_filename TEXT NOT NULL UNIQUE,
+    encrypted_session_key BLOB,
+    nonce BLOB,
+    signature BLOB,
+    sender_certificate BLOB,
+    ciphertext_sha256 TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    package_version INTEGER NOT NULL DEFAULT 1,
+    sender_cert_serial TEXT,
+    client_request_id TEXT,
+    created_at TEXT NOT NULL
+);
+
+certificates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    certificate BLOB NOT NULL,
+    serial_number TEXT NOT NULL UNIQUE,
+    issued_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active'
+);
+
+activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id),
+    action TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+);
 ```
 
 ---
 
-## Configuration (`config.py`)
+## Verification Pipeline & Decryption Flow (Phase 8)
 
-All configuration is centralised in a single `Config` class.  Values are
-read from environment variables (`.env` loaded via `python-dotenv`).
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Receiver as Recipient (Vidhi)
+    participant Web as Web / API (/files/:id/verify)
+    participant FileModel as models/file.py
+    participant CryptoPkg as crypto/package.py
+    participant Storage as storage/encrypted/
+    participant DB as SQLite DB
 
-| Setting | Source | Purpose |
+    Receiver->>Web: GET /files/:id/verify
+    Web->>FileModel: get_file_for_receiver(file_id, user_id)
+    alt Not Intended Receiver
+        FileModel-->>Web: None
+        Web-->>Receiver: 404 Not Found (Fail-Closed)
+    else Authorized Receiver
+        Web->>FileModel: reconstruct_package(file_id, user_id)
+        FileModel->>Storage: read_ciphertext(encrypted_filename)
+        FileModel-->>Web: Complete Package Dict
+        Web->>CryptoPkg: verify_package(package, expected_sender_email)
+        CryptoPkg->>CryptoPkg: verify_certificate() [CA signature, dates, revocation, email]
+        CryptoPkg->>CryptoPkg: recompute sha256_hex(ciphertext_with_tag)
+        CryptoPkg->>CryptoPkg: verify_signature() [RSA-PSS over canonical header]
+        CryptoPkg-->>Web: SecurityReport (overall: TRUSTED/FAILED)
+        Web->>DB: update_status(file_id, 'verified' | 'failed')
+        Web-->>Receiver: Render Security Status Screen (3 Panels + Monospace Box)
+    end
+
+    Receiver->>Web: POST /files/:id/download (with password)
+    Web->>DB: Verify password against scrypt hash
+    alt Bad Password
+        Web-->>Receiver: 401 Incorrect password
+    else Correct Password
+        Web->>CryptoPkg: verify_package() [Unconditional Re-verification]
+        alt Verification Fails / Tampered
+            Web-->>Receiver: 400 "Signature verification failed..."
+        else TRUSTED
+            Web->>CryptoPkg: open_package(package, receiver_private_key)
+            CryptoPkg->>CryptoPkg: unwrap_session_key() [RSA-OAEP]
+            CryptoPkg->>CryptoPkg: decrypt_bytes() [AES-256-GCM]
+            CryptoPkg-->>Web: Plaintext Bytes
+            Web-->>Receiver: send_file(BytesIO(plaintext)) with Cache-Control: no-store
+        end
+    end
+```
+
+---
+
+## Test Verification Suite
+
+The system includes 160 automated tests executing across 8 test suites:
+
+| Suite | Tests | Scope |
 |---|---|---|
-| `SECRET_KEY` | `$SECRET_KEY` or auto-generated | Flask session signing |
-| `DATABASE_PATH` | derived from `BASE_DIR` | SQLite file location |
-| `STORAGE_DIR` / `ENCRYPTED_STORAGE_DIR` | derived | future encrypted file storage |
-| `CERTIFICATES_DIR` / `KEYS_DIR` | derived | future PKI artefacts |
-| `MAX_CONTENT_LENGTH` | hardcoded (25 MB) | upload size limit |
-| `SESSION_COOKIE_*` | `$SESSION_COOKIE_SECURE` | cookie security settings |
-| `PERMANENT_SESSION_LIFETIME` | hardcoded (30 min) | session timeout |
-| `CIPHERLOCK_CA_PASSPHRASE` | `$CIPHERLOCK_CA_PASSPHRASE` | future CA key protection |
-| `DEMO_MODE` | `$DEMO_MODE` | future demo-user shortcut |
-| `WTF_CSRF_TIME_LIMIT` | hardcoded (3600 s) | CSRF token lifetime |
-
-The `_secret_key()` helper ensures that a local development server always has
-a **persistent** key (stored in `instance/secret_key`, which is git-ignored)
-rather than a new random key on every restart, which would invalidate sessions.
-
----
-
-## Database Layer
-
-SQLite is used via Python's standard `sqlite3` module.  No ORM is introduced
-in Phase 1 to keep dependencies minimal and to keep the schema transparent.
-
-### Schema (`database/schema.sql`)
-
-Four tables are created with `CREATE TABLE IF NOT EXISTS` so the script is
-idempotent and safe to run repeatedly:
-
-| Table | Purpose |
-|---|---|
-| `users` | Identity, scrypt password hash, public key, protected private key, certificate |
-| `files` | File transfer metadata; future encrypted filename, session key, nonce, signature, status |
-| `certificates` | X.509 certificate records; future serial, validity dates, revocation status |
-| `activity_log` | Audit trail; future user-linked action records |
-
-Foreign-key enforcement is enabled explicitly with `PRAGMA foreign_keys = ON`.
-
-Six indexes are defined upfront to support the query patterns that will be
-introduced in later phases (sender/receiver lookups, status filters,
-certificate lookups, and activity-log pagination).
-
-### Connection Lifecycle (`database/db.py`)
-
-| Function | Description |
-|---|---|
-| `get_db()` | Returns a request-scoped connection stored in Flask's `g` object; enables `foreign_keys` and sets `row_factory = sqlite3.Row` |
-| `close_db()` | Registered with `app.teardown_appcontext`; closes the connection at the end of every request |
-| `init_db()` | Creates the database file and runs `schema.sql`; safe to call on every startup |
-
----
-
-## Route Blueprints (`routes/`)
-
-All four blueprints are registered in `create_app` but contain only the
-`Blueprint` object in Phase 1.  Routes will be added in subsequent phases.
-
-| Blueprint | Module | Planned responsibility |
-|---|---|---|
-| `auth_bp` | `routes/auth.py` | Registration, login, logout |
-| `files_bp` | `routes/files.py` | Upload, download, list files |
-| `users_bp` | `routes/users.py` | Profile, key management |
-| `admin_bp` | `routes/admin.py` | User administration, CA operations |
-
----
-
-## Reserved Directories
-
-| Directory | Purpose |
-|---|---|
-| `models/` | Future SQLite row-helper classes |
-| `crypto/` | Future AES-GCM, RSA, X.509 modules |
-| `storage/encrypted/` | Future encrypted ciphertext storage |
-| `certificates/ca/` | Future CA certificate |
-| `certificates/users/` | Future user certificates |
-| `keys/ca/` | Future CA private key (passphrase-protected) |
-| `keys/users/` | Future per-user encrypted private keys |
-
-All directories are created at startup by `create_app` so the application
-never fails on a missing path.  `.gitkeep` files mark empty directories in
-the repository.
-
----
-
-## Template and Static Asset Layout
-
-```
-templates/
-  base.html         Shared layout: navbar, flash messages, footer
-  index.html        Landing page (extends base.html)
-  errors/
-    403.html        Forbidden
-    404.html        Not Found
-    413.html        Request Entity Too Large
-
-static/
-  css/
-    style.css       Core design tokens and component styles
-    landing.css     Entrance-animation layer (driven by main.js)
-  js/
-    main.js         Smooth-scroll, navbar elevation, IntersectionObserver
-                    entrance animations, skip-to-content
-  images/           Reserved for future UI images
-```
-
-`base.html` loads Bootstrap 5 from jsDelivr (CDN), then the project
-stylesheets, and finally `main.js` with `defer` so it never blocks rendering.
-
----
-
-## Security Posture (Phases 1–3)
-
-AES-GCM encryption/decryption primitives and protected RSA private-key
-provisioning are active. Full file encryption/sharing, session-key wrapping
-workflow, certificates, and signatures remain future work. Current protections:
-
-- **AES-256-GCM** uses fresh 12-byte nonces and authenticates ciphertext/tag
-  during decryption.
-- **RSA-3072** private keys are serialized as PKCS#8 in memory and protected
-  before persistence with AES-256-GCM. The versioned envelope contains an
-  HKDF-SHA256 salt, nonce, and authenticated ciphertext and is bound to its
-  user ID.
-- **Key derivation** uses the existing configured Flask `SECRET_KEY`, with a
-  per-key random salt and distinct HKDF context. Keep that secret stable and
-  backed up: rotating it makes existing protected private keys unrecoverable.
-- **CSRF protection** via Flask-WTF (`CSRFProtect`) covers state-changing
-  routes.
-- **HttpOnly, SameSite=Lax cookies** with a 30-minute lifetime.
-- **Secret key** never committed to version control; generated locally if
-  not supplied via `$SECRET_KEY`.
-- **`.env` git-ignored**; only `.env.example` (with placeholder values)
-  is committed.
-- **Runtime directories and database files git-ignored**.
-
----
-
-## Testing Strategy
-
-Phase 1 tests are smoke tests that verify the application starts, serves
-pages, and creates the expected database schema.
-
-| File | Role |
-|---|---|
-| `conftest.py` | Session-scoped `app` and `client` fixtures |
-| `pytest.ini` | Test discovery, warning filters, output flags |
-| `tests/test_app.py` | Landing page (200), health JSON, four DB tables, 403/404/413 pages |
-| `tests/test_crypto.py` | AES-GCM, RSA serialization, protected private keys, and registration provisioning |
-
-Tests use `tmp_path` / `tmp_path_factory` so the production database is
-never touched and tests remain fully isolated from one another.
-
----
-
-## Planned Phases
-
-| Phase | Focus |
-|---|---|
-| 2 | User registration and password authentication |
-| 3 | RSA key-pair generation and AES-256-GCM file encryption |
-| 4 | Mini CA and X.509 certificate issuance |
-| 5 | RSA-OAEP session-key wrapping and RSA-PSS signatures |
-| 6 | Hybrid encrypted file package assembly |
-| 7 | Secure file upload and sharing workflow |
-| 8 | Recipient verification and decryption |
-| 9 | Tampering detection, certificate revocation, security demonstrations |
-| 10 | Final integration, end-to-end testing, and project demonstration |
+| `tests/test_app.py` | 6 | Factory, database schema, landing route, JSON error handling |
+| `tests/test_auth.py` | 22 | scrypt hashing, brute-force lockout (5 fails / 300s), session renewal, CSRF |
+| `tests/test_crypto.py` | 8 | AES-256-GCM primitives, RSA-3072 serialization, private key envelopes |
+| `tests/test_ca_certs.py` | 5 | Root CA generation, X.509 issuance, certificate validation, revocation |
+| `tests/test_signatures.py` | 7 | RSA-PSS signing, signature verification, salt length enforcement |
+| `tests/test_wrap.py` | 28 | RSA-OAEP key wrapping, unwrapping, tamper resistance |
+| `tests/test_package.py` | 8 | Canonical JSON signing header, hybrid package build/open roundtrip |
+| `tests/test_files.py` | 78 | Upload validation, storage naming, atomic replace, sent/received listings, participant scoping |
+| `tests/test_flow.py` | 6 | **Phase 8 End-to-End**: Happy path verification & download, unauthorized 404, bad password 401, tampered ciphertext block, sender download refusal, revoked certificate block |
+| **Total** | **158 passed** | **2 skipped (Windows-specific symlink / permission tests)** |

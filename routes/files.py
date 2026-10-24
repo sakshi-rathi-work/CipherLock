@@ -14,19 +14,32 @@ decryption and download are Phase 8.
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import sqlite3
 from typing import Any
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 from werkzeug.exceptions import HTTPException
+from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 
+from crypto.aes import DecryptionError
 from crypto.certificates import load_certificate, verify_certificate
 from crypto.key_storage import PrivateKeyProtectionError, unprotect_private_key
-from crypto.package import build_package
-from crypto.rsa import KeyFormatError, load_public_key, public_key_fingerprint
+from crypto.package import (
+    PACKAGE_VERSION,
+    SIGNATURE_FAILURE_MESSAGE,
+    SecurityReport,
+    TamperError,
+    build_package,
+    format_security_box,
+    open_package,
+    verify_package,
+)
+from crypto.rsa import KeyFormatError, UnwrapError, load_public_key, public_key_fingerprint
+from crypto.signatures import sha256_hex
 from database.db import get_db
 from models import file as file_model
 from models import storage as file_storage
@@ -35,6 +48,7 @@ from models.user import get_protected_private_key
 from routes import login_required
 
 files_bp = Blueprint("files", __name__, url_prefix="/api/files")
+files_web_bp = Blueprint("files_web", __name__)
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _MAX_FILENAME_LENGTH = 255
@@ -424,3 +438,278 @@ def file_detail(file_id: int):
     data = file_model.file_to_dict(row, include_digest=True, include_storage_status=True)
     data["crypto"] = _crypto_summary(data)
     return jsonify({"file": data}), 200
+
+
+# ---------------------------------------------------------------------------- Phase 8 verification & download
+
+def _evaluate_checks(package: dict[str, Any], sender_row: sqlite3.Row) -> tuple[SecurityReport, dict[str, Any], dict[str, Any], str]:
+    """Execute all certificate, signature, and integrity checks for package inspection."""
+    cert_pem = package["sender_cert_pem"]
+    expected_email = sender_row["email"]
+    cert_report = verify_certificate(cert_pem, expected_email=expected_email)
+    sender_cert = load_certificate(cert_pem)
+    sender_fingerprint = public_key_fingerprint(sender_cert.public_key())
+    report = verify_package(package, expected_sender_email=expected_email)
+
+    actual_hash = sha256_hex(package["ciphertext_with_tag"])
+    recorded_hash = package.get("ciphertext_sha256_hex", "")
+    hash_matches = (actual_hash == recorded_hash)
+    serial_matches = (sender_cert.serial_number == package["sender_cert_serial"])
+
+    checks = {
+        "certificate": {
+            "status": report.certificate,
+            "ca_signature_ok": cert_report.ca_signature_ok,
+            "validity_ok": cert_report.validity_ok,
+            "not_revoked": cert_report.not_revoked,
+            "subject_ok": cert_report.subject_ok,
+            "key_usage_ok": cert_report.key_usage_ok,
+            "serial_matches": serial_matches,
+        },
+        "signature": {
+            "status": report.signature,
+            "signature_ok": (report.signature == "VALID"),
+            "canonical_header_ok": (report.signature == "VALID"),
+        },
+        "integrity": {
+            "status": report.integrity,
+            "hash_matches": hash_matches,
+            "payload_intact": (report.integrity == "PASSED"),
+        },
+    }
+
+    sender_info = {
+        "id": sender_row["id"],
+        "name": sender_row["name"],
+        "email": sender_row["email"],
+        "serial_number": str(package["sender_cert_serial"]),
+        "fingerprint": sender_fingerprint,
+    }
+
+    security_box = format_security_box(report)
+    return report, checks, sender_info, security_box
+
+
+def _handle_verify(file_id: int, is_api: bool):
+    user = g.current_user
+    row = None
+    if 0 < file_id <= _SQLITE_MAX_INT:
+        row = file_model.get_file_for_receiver(file_id, user["id"])
+    if row is None:
+        log_activity(user["id"], "file_access_denied", f"file_id={file_id}", commit=True)
+        if is_api or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(404, "File not found")
+        return render_template("errors/404.html"), 404
+
+    try:
+        package = file_model.reconstruct_package(file_id, user["id"])
+    except (file_model.StoredPackageError, file_storage.StorageError, LookupError) as exc:
+        current_app.logger.exception("Could not reconstruct package for file_id=%s", file_id)
+        if is_api or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, "Could not load stored package.")
+        flash("Could not load stored package.", "danger")
+        return redirect(url_for("files_web.received_files_web"))
+
+    sender_row = get_db().execute(
+        "SELECT id, name, email FROM users WHERE id = ?", (row["sender_id"],)
+    ).fetchone()
+    if sender_row is None:
+        if is_api:
+            return _error(404, "Sender record not found")
+        return render_template("errors/404.html"), 404
+
+    report, checks, sender_info, security_box = _evaluate_checks(package, sender_row)
+
+    # Persist the verification status in the database
+    new_status = file_model.STATUS_VERIFIED if report.overall == "TRUSTED" else file_model.STATUS_FAILED
+    file_model.update_status(file_id, new_status, commit=False)
+    action = "file_verify" if report.overall == "TRUSTED" else "file_verify_failed"
+    log_activity(user["id"], action, f"file_id={file_id} status={report.overall}", commit=False)
+    get_db().commit()
+
+    file_dict = file_model.file_to_dict(row, include_digest=True)
+    file_dict["status"] = new_status
+
+    if is_api or request.path.startswith("/api/") or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+        return jsonify({
+            "file": file_dict,
+            "sender": sender_info,
+            "report": {
+                "certificate": report.certificate,
+                "signature": report.signature,
+                "integrity": report.integrity,
+                "overall": report.overall,
+                "messages": report.messages,
+            },
+            "checks": checks,
+            "security_box": security_box,
+            "can_decrypt": (report.overall == "TRUSTED"),
+        }), 200
+
+    return render_template(
+        "security_status.html",
+        file=file_dict,
+        sender=sender_info,
+        report=report,
+        checks=checks,
+        security_box=security_box,
+        can_decrypt=(report.overall == "TRUSTED"),
+    )
+
+
+def _handle_download(file_id: int, is_api: bool):
+    user = g.current_user
+    row = None
+    if 0 < file_id <= _SQLITE_MAX_INT:
+        row = file_model.get_file_for_receiver(file_id, user["id"])
+    if row is None:
+        log_activity(user["id"], "file_access_denied", f"file_id={file_id}", commit=True)
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(404, "File not found")
+        return render_template("errors/404.html"), 404
+
+    # Extract receiver password for single-request in-memory authorization
+    password = ""
+    if request.is_json and request.json:
+        password = (request.json.get("password") or "").strip()
+    elif request.form:
+        password = (request.form.get("password") or "").strip()
+
+    if not password:
+        err = "Password is required to decrypt the file."
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, err)
+        flash(err, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+
+    # Authenticate password against receiver's scrypt hash
+    user_row = get_db().execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+    if not user_row or not user_row["password_hash"] or not check_password_hash(user_row["password_hash"], password):
+        log_activity(user["id"], "file_download_rejected", f"file_id={file_id} reason=bad_password", commit=True)
+        err = "Incorrect password. Please enter your account password to decrypt the file."
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(401, err)
+        flash(err, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+
+    # Re-run full package verification (never trust prior stored status alone)
+    try:
+        package = file_model.reconstruct_package(file_id, user["id"])
+    except (file_model.StoredPackageError, file_storage.StorageError, LookupError):
+        current_app.logger.exception("Failed package reconstruction on download for file_id=%s", file_id)
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, SIGNATURE_FAILURE_MESSAGE)
+        flash(SIGNATURE_FAILURE_MESSAGE, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+
+    report = verify_package(package, expected_sender_email=row["sender_email"])
+    if report.overall != "TRUSTED":
+        file_model.update_status(file_id, file_model.STATUS_FAILED, commit=True)
+        log_activity(user["id"], "file_download_rejected", f"file_id={file_id} reason=verification_failed", commit=True)
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, SIGNATURE_FAILURE_MESSAGE)
+        flash(SIGNATURE_FAILURE_MESSAGE, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+
+    # Unlock receiver's private key for in-memory decryption
+    protected = get_protected_private_key(user["id"])
+    if protected is None:
+        return _error(500, "Your private key is unavailable. Please contact an administrator.")
+
+    try:
+        private_key = unprotect_private_key(protected, current_app.config["SECRET_KEY"], user["id"])
+    except (PrivateKeyProtectionError, TypeError, ValueError):
+        current_app.logger.exception("Could not unprotect receiver private key for file_id=%s", file_id)
+        return _error(500, "Could not unlock your private key.")
+
+    # Open package and decrypt in memory
+    plaintext = None
+    try:
+        plaintext = open_package(package, private_key, expected_sender_email=row["sender_email"])
+    except TamperError:
+        file_model.update_status(file_id, file_model.STATUS_FAILED, commit=True)
+        log_activity(user["id"], "file_download_failed", f"file_id={file_id} reason=tamper_error", commit=True)
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, SIGNATURE_FAILURE_MESSAGE)
+        flash(SIGNATURE_FAILURE_MESSAGE, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+    except UnwrapError:
+        log_activity(user["id"], "file_download_failed", f"file_id={file_id} reason=unwrap_error", commit=True)
+        err = "Failed to unwrap the encryption key. The file may not have been encrypted for your key."
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, err)
+        flash(err, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+    except DecryptionError:
+        log_activity(user["id"], "file_download_failed", f"file_id={file_id} reason=decryption_error", commit=True)
+        err = "File decryption failed. The encrypted content or integrity tag is corrupted."
+        if is_api or request.is_json or (request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html):
+            return _error(400, err)
+        flash(err, "danger")
+        return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+    finally:
+        del private_key
+
+    file_model.update_status(file_id, file_model.STATUS_VERIFIED, commit=True)
+    log_activity(user["id"], "file_download", f"file_id={file_id}", commit=True)
+
+    # Stream plaintext directly from memory (never touches disk)
+    response = send_file(
+        io.BytesIO(plaintext),
+        as_attachment=True,
+        download_name=row["original_filename"],
+        mimetype="application/octet-stream",
+    )
+    del plaintext
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+# --------------------------------------------------------------------- Phase 8 routes
+
+@files_web_bp.get("/received")
+@login_required
+def received_files_web():
+    """List received files for the authenticated user (server-rendered view)."""
+    user = g.current_user
+    rows, total = file_model.list_received(user["id"], limit=100)
+    files = [file_model.file_to_dict(row) for row in rows]
+    return render_template("received_files.html", files=files, total=total)
+
+
+@files_web_bp.get("/files/<int:file_id>/verify")
+@login_required
+def verify_file_web(file_id: int):
+    """Verify package and display the Security Status screen."""
+    return _handle_verify(file_id, is_api=False)
+
+
+@files_bp.get("/<int:file_id>/verify")
+@login_required
+def verify_file_api(file_id: int):
+    """Verify package and return JSON security report."""
+    return _handle_verify(file_id, is_api=True)
+
+
+@files_web_bp.post("/files/<int:file_id>/download")
+@login_required
+def download_file_web(file_id: int):
+    """Re-verify, authenticate password, decrypt in memory and download."""
+    return _handle_download(file_id, is_api=False)
+
+
+@files_bp.post("/<int:file_id>/download")
+@login_required
+def download_file_api(file_id: int):
+    """Re-verify, authenticate password, decrypt in memory and download via API."""
+    return _handle_download(file_id, is_api=True)
+
+
+@files_web_bp.get("/files/<int:file_id>/download")
+@files_bp.get("/<int:file_id>/download")
+@login_required
+def download_file_redirect(file_id: int):
+    """GET on download redirects to verify page."""
+    return redirect(url_for("files_web.verify_file_web", file_id=file_id))
+

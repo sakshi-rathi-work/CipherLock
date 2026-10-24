@@ -47,16 +47,43 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     from routes.admin import admin_bp
     from routes.auth import auth_bp
-    from routes.files import files_bp
+    from routes.files import files_bp, files_web_bp
     from routes.users import users_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(files_web_bp)
     for blueprint in (files_bp, users_bp, admin_bp):
         app.register_blueprint(blueprint)
 
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/dashboard")
+    def dashboard():
+        from flask import redirect, session
+        user_id = session.get("user_id")
+        if not user_id:
+            frontend_url = app.config.get("FRONTEND_URL")
+            return redirect(f"{frontend_url}/login" if frontend_url else "/login")
+        from models.user import get_user_by_id
+        user = get_user_by_id(user_id)
+        if not user:
+            session.clear()
+            return redirect("/login")
+        from models.file import list_received, count_sent, count_received, file_to_dict
+        from models.activity import list_recent_activity
+        received_rows, received_total = list_received(user_id, limit=10)
+        received_files = [file_to_dict(r) for r in received_rows]
+        activity = list_recent_activity(user_id, limit=10)
+        return render_template(
+            "dashboard.html",
+            user=user,
+            received_files=received_files,
+            sent_count=count_sent(user_id),
+            received_count=received_total,
+            activity=activity,
+        )
 
     @app.get("/health")
     def health():

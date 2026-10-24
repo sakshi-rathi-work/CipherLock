@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "partials/status_badge.html" import render_status_badge %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <!-- Dashboard Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <p class="text-uppercase text-lime fw-semibold small mb-1" style="letter-spacing: 0.1em;">Security Control Center</p>
+      <h1 class="h2 fw-bold text-white mb-1">Welcome, {{ user.name }}</h1>
+      <p class="text-secondary small mb-0 font-monospace">{{ user.email }} · RSA-3072 Key Pair Active · Mini CA Certified</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('files_web.received_files_web') }}" class="btn btn-outline-info btn-sm font-monospace">
+        📥 View All Received
+      </a>
+      {% if config.FRONTEND_URL %}
+      <a href="{{ config.FRONTEND_URL }}/send" class="btn btn-lime btn-sm font-monospace">
+        📤 Send File
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card bg-dark border border-secondary shadow-sm p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Received Files</div>
+            <div class="h3 fw-bold text-white mb-0 font-monospace">{{ received_count }}</div>
+          </div>
+          <div class="p-2 rounded bg-info bg-opacity-10 text-info">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm9.954 5H10.45a2.5 2.5 0 0 1-4.9 0H1.066l.32 2.562a.5.5 0 0 0 .497.438h12.234a.5.5 0 0 0 .496-.438zM3.809 3.563A1.5 1.5 0 0 1 4.981 3h6.038a1.5 1.5 0 0 1 1.172.563l3.7 4.625a.5.5 0 0 1 .105.374l-.39 3.124A1.5 1.5 0 0 1 14.12 13H1.88a1.5 1.5 0 0 1-1.486-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-dark border border-secondary shadow-sm p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Sent Files</div>
+            <div class="h3 fw-bold text-white mb-0 font-monospace">{{ sent_count }}</div>
+          </div>
+          <div class="p-2 rounded bg-success bg-opacity-10 text-success">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.8 14a.5.5 0 0 1-.928.008L6.87 9.87.146 7.514a.5.5 0 0 1 .008-.928l14-5.8a.5.5 0 0 1 .54.11L15.854.146zm-6.24 9.07 4.887-4.887-9.52 3.945 4.633 1.942z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-dark border border-secondary shadow-sm p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-secondary small text-uppercase" style="letter-spacing: 0.05em;">Cryptographic Trust</div>
+            <div class="h5 fw-bold text-lime mb-0 font-monospace">X.509 + AES-256</div>
+          </div>
+          <div class="p-2 rounded bg-warning bg-opacity-10 text-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Received Files with Verification Status Column -->
+  <div class="card bg-dark border border-secondary shadow-lg mb-4">
+    <div class="card-header bg-secondary bg-opacity-25 py-3 px-3 border-secondary d-flex justify-content-between align-items-center">
+      <h5 class="fw-bold text-white mb-0 d-flex align-items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#c4f16e" viewBox="0 0 16 16">
+          <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z"/>
+        </svg>
+        Recent Received Files
+      </h5>
+      <a href="{{ url_for('files_web.received_files_web') }}" class="small text-lime text-decoration-none">View All →</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0">
+        <thead class="table-secondary text-uppercase small" style="letter-spacing: 0.05em; font-size: 0.75rem;">
+          <tr>
+            <th scope="col" class="py-3 px-3">Original Filename</th>
+            <th scope="col" class="py-3">Sender</th>
+            <th scope="col" class="py-3">Received At</th>
+            <th scope="col" class="py-3">Verification Status</th>
+            <th scope="col" class="py-3 text-end px-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if received_files and received_files|length > 0 %}
+            {% for f in received_files %}
+            <tr>
+              <td class="px-3 fw-medium text-white font-monospace">{{ f.original_filename }}</td>
+              <td>
+                <div class="fw-semibold text-light">{{ f.sender.name if f.sender is mapping else f.sender_name }}</div>
+                <div class="text-secondary small font-monospace">{{ f.sender.email if f.sender is mapping else f.sender_email }}</div>
+              </td>
+              <td class="text-secondary small font-monospace">{{ f.created_at }}</td>
+              <td>{{ render_status_badge(f.status) }}</td>
+              <td class="text-end px-3">
+                <a href="{{ url_for('files_web.verify_file_web', file_id=f.id) }}" class="btn btn-sm btn-outline-info font-monospace">Verify</a>
+                <a href="{{ url_for('files_web.verify_file_web', file_id=f.id) }}#decrypt-section" class="btn btn-sm btn-lime font-monospace ms-1">Decrypt</a>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-secondary small">No received files yet.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Activity Audit Trail -->
+  <div class="card bg-dark border border-secondary shadow-sm">
+    <div class="card-header bg-secondary bg-opacity-25 py-3 px-3 border-secondary">
+      <h5 class="fw-bold text-white mb-0 d-flex align-items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#38bdf8" viewBox="0 0 16 16">
+          <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71z"/>
+          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0"/>
+        </svg>
+        Recent Security Activity Log
+      </h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0 small">
+        <thead class="table-secondary text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">
+          <tr>
+            <th class="py-2 px-3">Action</th>
+            <th class="py-2">Detail</th>
+            <th class="py-2 px-3 text-end">Timestamp</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if activity and activity|length > 0 %}
+            {% for act in activity %}
+            <tr>
+              <td class="px-3">
+                <span class="badge bg-secondary font-monospace">{{ act.action }}</span>
+              </td>
+              <td class="text-secondary font-monospace">{{ act.detail }}</td>
+              <td class="text-end px-3 text-secondary font-monospace">{{ act.created_at }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="3" class="text-center py-3 text-secondary">No activity logged yet.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
