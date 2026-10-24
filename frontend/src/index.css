@@ -59,6 +59,10 @@ body {
     @apply bg-white border border-line rounded-2xl shadow-card;
   }
 
+  .card {
+    @apply surface;
+  }
+
   .surface-hover {
     @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover hover:border-line-strong;
   }
