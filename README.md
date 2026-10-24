@@ -1,282 +1,269 @@
-# CipherLock — Secure File Storage and Sharing System
+# CipherLock — Secure File Storage & Sharing System
 
-CipherLock is an applied Cryptography and Network Security project (SPIT Mumbai) implementing a secure file storage and sharing web platform with provable cryptographic guarantees: **confidentiality** (AES-256-GCM), **integrity and non-repudiation** (RSA-PSS digital signatures over canonical JSON headers), **sender authenticity and authorization** (X.509 PKI certificates issued by an internal Root CA), and **fail-closed verification** before any file decryption.
+**Applied Cryptography and Network Security** · SPIT Mumbai
 
-The system is developed across 10 sequential, disciplined phases.
-
----
-
-## Current Status
-
-- **Completed Phases:** Phase 1 through Phase 9 (Phase 9 implementation available on its feature branch)
-- **Current Milestone:** **Phase 9 — Attack demonstrations and admin completion**
-- **Validation:** Run the commands in [Testing & Verification](#testing--verification) on your machine before merging.
-- **CLI Attack Suite:** **9/9 attack cases PASS** (`python scripts/e2e_cli.py`)
-- **Frontend SPA Build:** **Clean build** via Vite (`npm run build`)
+CipherLock is an applied cryptographic web platform that allows registered users to securely store and share sensitive files with end-to-end mathematical guarantees:
+- **Confidentiality:** Files are encrypted using authenticated symmetric cipher **AES-256-GCM**.
+- **Key Protection:** Ephemeral 256-bit AES session keys are wrapped for the recipient using **RSA-OAEP** (SHA-256, MGF1).
+- **Integrity & Non-Repudiation:** Package metadata and ciphertext hashes are digitally signed with the sender's private key using **RSA-PSS** (SHA-256, 32-byte salt).
+- **Sender Authentication & Trust:** Backed by an internal Mini Public Key Infrastructure (**Root CA**) that issues and validates **X.509 certificates**.
+- **Strict Fail-Closed Verification:** Before any file is decrypted, the receiver's pipeline verifies the X.509 certificate chain, recomputes the ciphertext SHA-256 hash directly from disk, and verifies the digital signature. If any check fails, decryption is refused and plaintext is never produced.
+- **Memory-Buffered Architecture:** Plaintext never touches the server filesystem or temporary directories; file parts are streamed into memory (`io.BytesIO`) and decrypted streams are served with `Cache-Control: no-store`.
 
 ---
 
-## 10-Phase Project Matrix
-
-| Phase | Milestone | Focus | Status |
-| :---: | :--- | :--- | :---: |
-| **1** | Application Foundation | Flask app factory, config, SQLite schema, CSRF, security headers, landing page | `COMPLETE` |
-| **2** | User Authentication | Salted `scrypt` hashing, brute-force lockout, session management, audit log, React SPA | `COMPLETE` |
-| **3** | Cryptographic Primitives | AES-256-GCM authenticated cipher, RSA-3072 key pairs, protected private key envelopes | `COMPLETE` |
-| **4** | Mini Public Key Infrastructure | Self-signed RSA-4096 Root CA, X.509 user certificates, fail-closed validation, CA admin | `COMPLETE` |
-| **5** | Key Wrapping & Signatures | RSA-OAEP session-key wrapping, RSA-PSS SHA-256 digital signatures with 32-byte salt | `COMPLETE` |
-| **6** | Hybrid Cryptographic Package | Canonical JSON header, tamper detection, fail-closed `open_package`, 9 attack CLI proofs | `COMPLETE` |
-| **7** | File Storage & Sharing API | In-memory upload stream, random UUID storage, participant-scoped listings, file stats | `COMPLETE` |
-| **8** | Receiver Verification & Decryption | 3-panel Security Status UI, monospace audit terminal box, password re-authenticated in-memory download | `COMPLETE` |
-| **9** | Attack Demonstrations & Admin | Admin-only local attack lab, Stolen Data analysis, CLI attack scripts, account and certificate controls | Implemented |
-| **10** | Production Hardening & Viva | Security headers, CSP, secret audit script, single-origin serving, report, Viva Q&A | Planned |
-
----
-
-## Core Cryptographic Architecture (Decisions D1–D8)
-
-CipherLock strictly complies with eight foundational cryptographic principles:
-
-1. **D1 — Hybrid Encryption Standard:** Files are encrypted exclusively with symmetric **AES-256-GCM**. The random 256-bit AES session key is wrapped for the recipient using **RSA-OAEP** (SHA-256, MGF1-SHA-256). The package metadata header is signed with the sender's **RSA-PSS** private key (SHA-256, salt length 32). RSA never directly encrypts files.
-2. **D2 — Dedicated RSA-3072 Key Pairs:** Each user possesses a single RSA-3072 key pair. X.509 `KeyUsage` enforces `digitalSignature` and `keyEncipherment`.
-3. **D3 — Private Key Protection at Rest:** User private keys are protected as encrypted PKCS#8 envelopes using HKDF-SHA256 derived keys from the application `SECRET_KEY` and bound to the user ID. The user's account password re-authenticates the receiver on download. Keys are never logged, stored in cookies, or sent to client browsers.
-4. **D4 — Mini Public Key Infrastructure (PKI):** An internal self-signed RSA-4096 Root CA issues 1-year X.509 user certificates containing CN/email identity, SAN email, and serial numbers tracked in the database with revocation states.
-5. **D5 — AES-GCM Authenticated Encryption:** A fresh 32-byte key and 96-bit random nonce are generated per file. Storage format is `ciphertext || 16-byte GCM tag`. Canonical header metadata is authenticated as Additional Authenticated Data (AAD).
-6. **D6 — Canonical Signed Header:** Compact, sorted-key JSON:
-   ```json
-   {"ciphertext_sha256_hex":"...","nonce_b64":"...","original_filename":"...","receiver_id":...,"sender_cert_serial":...,"sender_id":...,"version":1,"wrapped_key_b64":"..."}
-   ```
-   At verification, `ciphertext_sha256_hex` is **recomputed from the disk ciphertext**, never trusted from the database.
-7. **D7 — Fail-Closed Receiver Verification:**
-   $$\text{Auth Check} \longrightarrow \text{X.509 CA Trust \& Revocation} \longrightarrow \text{Recomputed SHA-256} \longrightarrow \text{RSA-PSS Signature} \longrightarrow \text{RSA-OAEP Unwrap} \longrightarrow \text{AES-GCM Decrypt}$$
-   If any check fails, decryption is refused, returning:
-   > *"Signature verification failed. File may have been modified or sender authenticity could not be established."*
-8. **D8 — Storage & Memory Discipline:** Plaintext **never touches the server disk or temporary files**. Uploads buffer in `io.BytesIO` via `InMemoryUploadRequest`. Ciphertext files are written with `0600` permissions under random UUIDs (`<uuid4>.bin`). Decrypted files stream directly from memory with `Cache-Control: no-store`.
+## Table of Contents
+1. [Core Features](#core-features)
+2. [Cryptographic Design Principles (D1–D8)](#cryptographic-design-principles-d1d8)
+3. [System Architecture](#system-architecture)
+   - [System Overview](#system-overview)
+   - [Sender Upload Pipeline](#sender-upload-pipeline)
+   - [Receiver Verification & Decryption Pipeline](#receiver-verification--decryption-pipeline)
+   - [Key Management Hierarchy (KMS)](#key-management-hierarchy-kms)
+4. [Technology Stack](#technology-stack)
+5. [Installation & Setup](#installation--setup)
+   - [Prerequisites](#prerequisites)
+   - [Quick Start (One-Command Setup)](#quick-start-one-command-setup)
+   - [Manual Setup (Step-by-Step)](#manual-setup-step-by-step)
+6. [Running the Application](#running-the-application)
+7. [Testing & Verification](#testing--verification)
+   - [Running Pytest Suite](#running-pytest-suite)
+   - [Running E2E CLI Attack Suite](#running-e2e-cli-attack-suite)
+   - [Interactive CLI Attack Demonstrations](#interactive-cli-attack-demonstrations)
+8. [Project Structure](#project-structure)
+9. [API Reference](#api-reference)
 
 ---
 
-## Detailed Features Implemented by Phase
+## Core Features
 
-### Phase 1 — Application Foundation & Database Schema
-- Flask application factory (`create_app`) with centralized error handlers (400, 401, 403, 404, 405, 413, 429, 500).
-- SQLite database initialization (`database/schema.sql` and `database/db.py`) managing `users`, `files`, `certificates`, and `activity_log` with foreign keys and indexes.
-- Responsive server-rendered Bootstrap 5 landing page (`/`) and system `/health` endpoint.
-- CSRF synchronizer token protection (`Flask-WTF`).
-
-### Phase 2 — Authentication & Access Control
-- Password hashing using salted **`scrypt`** via Werkzeug (`scrypt:` format) with strict complexity validation ($\ge 10$ and $\le 128$ chars, upper, lower, digit).
-- Thread-safe in-memory brute-force lockout: 5 consecutive failed login attempts trigger a 300-second lockout window per `(email, IP)` pair.
-- Constant-time dummy password verification on unknown email lookups to prevent user enumeration via timing analysis.
-- Session regeneration on login (`session.clear()`), `HttpOnly + SameSite=Lax` cookies, 30-minute idle expiration.
-- Complete React 18 + Vite + Tailwind CSS v3 SPA (`frontend/`) with live password meter, lockout countdown, and security dashboard.
-
-### Phase 3 — Symmetric & Asymmetric Cryptographic Primitives
-- `crypto/aes.py`: AES-256-GCM primitives generating 256-bit keys and 96-bit nonces, with authenticated decryption raising `DecryptionError` on tag mismatch.
-- `crypto/rsa.py`: RSA-3072 key pair generation, SubjectPublicKeyInfo PEM serialization, and fingerprint derivation.
-- `crypto/key_storage.py`: Encrypted private-key storage envelopes using AES-256-GCM with HKDF-SHA256 key derivation from Flask `SECRET_KEY`, bound to the owning user ID.
-- Registration provisioning integration (`models/provisioning.py`) atomically creating keys on user signup.
-
-### Phase 4 — Mini Certificate Authority & X.509 Certificates
-- `crypto/ca.py`: RSA-4096 Root CA with encrypted PKCS#8 storage (`CIPHERLOCK_CA_PASSPHRASE`), issuing 1-year X.509 user certificates.
-- `crypto/certificates.py`: Fail-closed certificate verification returning structured `CertReport` (evaluating CA signature, validity window, database revocation state, subject email match, and KeyUsage).
-- Certificate management endpoints: directory (`/api/users/directory`), certificate viewer (`/api/users/<id>/certificate`), and admin CA panel (`/api/admin/*`).
-
-### Phase 5 — RSA-OAEP Key Wrapping & RSA-PSS Digital Signatures
-- `crypto/rsa.py`: `wrap_session_key` and `unwrap_session_key` implementing RSA-OAEP with SHA-256 and MGF1-SHA-256. Raises `UnwrapError` on mismatch to prevent oracle attacks.
-- `crypto/signatures.py`: `sign_data` and `verify_signature` implementing RSA-PSS with SHA-256 and 32-byte salt (`PSS_SALT_LENGTH = 32`).
-- Helper `sha256_hex` producing 64-character lowercase hexadecimal digests.
-
-### Phase 6 — Hybrid Package Creation & Attack Validation
-- `crypto/package.py`: Creates hybrid packages by encrypting with AES-256-GCM, wrapping keys with RSA-OAEP, hashing ciphertext with SHA-256, and signing canonical JSON headers with RSA-PSS.
-- Fail-closed verification and opening (`open_package`) raising `TamperError` or `UnwrapError`.
-- CLI validation test suite (`scripts/e2e_cli.py`) testing 9 distinct attack vectors against temporary in-memory CA and keys without touching production data.
-
-### Phase 7 — File Storage & Sharing API
-- `InMemoryUploadRequest`: Werkzeug stream override ensuring uploaded file plaintext buffers directly in memory (`io.BytesIO`) up to 25 MiB cap.
-- Safe ciphertext storage: written atomically via temp files and `os.replace` with `0600` permissions under random UUID filenames (`storage/encrypted/<uuid4>.bin`).
-- Additive database migration (`migrate_files_table`) adding `package_version`, `sender_cert_serial`, and `client_request_id` idempotency.
-- Participant-scoped endpoints (`/api/files/sent`, `/api/files/received`, `/api/files/<id>`, `/api/files/stats`) with throttled audit logging.
-
-### Phase 8 — Receiver Workflow, Security Status UI & Decryption
-- Full receiver verification pipeline (`GET /files/<id>/verify` and `GET /api/files/<id>/verify`):
-  - Validates recipient authorization (returns 404 for unauthorized users or senders; fail closed).
-  - Reconstructs hybrid package from database record and stored ciphertext on disk.
-  - Re-evaluates X.509 certificate trust, recomputes SHA-256 digest from stored `.bin`, and verifies RSA-PSS signature.
-  - Updates `files.status` to `verified` or `failed`.
-- 3-Panel Security Status UI (`templates/security_status.html` and `frontend/src/pages/SecurityStatus.jsx`):
-  - **Certificate Panel:** CA signature, validity dates, revocation status, email binding.
-  - **Signature Panel:** RSA-PSS canonical header signature check, signer identity.
-  - **Integrity Panel:** SHA-256 digest match between disk ciphertext and signed header.
-  - **ASCII Monospace Terminal Status Box:** Exact replica of the CLI `CIPHERLOCK SECURITY CHECK` audit box.
-  - **Sender Provenance Card:** Sender name, email, and X.509 certificate serial number.
-  - **Decrypt & Download Form:** Active only when overall status is `TRUSTED`.
-- In-memory decrypted streaming (`POST /files/<id>/download` and `POST /api/files/<id>/download`):
-  - Re-authenticates receiver using their account password.
-  - **Unconditionally re-verifies package trust** (never trusts stored database status alone).
-  - Unwraps session key via RSA-OAEP, authenticates and decrypts payload via AES-256-GCM in memory.
-  - Streams plaintext directly via `send_file(io.BytesIO(plaintext))` with `Cache-Control: no-store` and `Pragma: no-cache`.
-  - Fail-closed enforcement: On any failure, returns:
-    `"Signature verification failed. File may have been modified or sender authenticity could not be established."`
-
-  ### Phase 9 — Attack Demonstrations & Admin Completion
-  - The Attacker Simulation Lab is available only to administrators when `DEMO_MODE=1`; all lab endpoints return 404 otherwise. It can tamper with ciphertext, signed metadata, signatures, or sender certificates and restore the original package.
-  - Demo backups and audit entries are scoped to locally stored files. Every lab operation is logged as `SIMULATED ATTACK`; a recipient must independently verify the result, and tampered packages remain blocked from download.
-  - Admin tools include user enable/disable controls (with self/last-admin safeguards), active/revoked/expired certificate filters, password-confirmed certificate reissue, and a searchable audit log.
-  - The Stolen Data Analysis screen explains the AES-256 keyspace and illustrates why unrelated private keys, random keys, and sender public keys cannot decrypt the receiver's package. It is an explanation only and does not attempt to decrypt real files.
-  - `scripts/demo_tamper.py`, `scripts/demo_unauthorized.py`, and `scripts/demo_revocation.py` create disposable local apps and temporary cryptographic material; they do not use the configured database, CA, or stored files.
-  - Keep `DEMO_MODE=0` outside a disposable local demonstration environment.
-
-  ---
-
-## Route & API Reference
-
-### Web / HTML Routes
-
-| Method | Route | Description | Auth Required |
-| :--- | :--- | :--- | :---: |
-| `GET` | `/` | System overview and security concept landing page | No |
-| `GET` | `/health` | Application health check endpoint | No |
-| `GET` | `/dashboard` | Receiver dashboard with received transfers and recent audit log | Yes |
-| `GET` | `/received` | Secure inbox listing files received by the authenticated user | Yes |
-| `GET` | `/files/<id>/verify` | Security Status UI with 3 verification panels and monospace check box | Yes |
-| `POST`| `/files/<id>/download`| Password re-authenticated in-memory decryption and streaming download | Yes |
-
-### REST JSON Endpoints
-
-| Method | Endpoint | Description | Auth Required | CSRF Protected |
-| :--- | :--- | :--- | :---: | :---: |
-| `GET` | `/api/csrf-token` | Fetch synchronizer CSRF token (`Cache-Control: no-store`) | No | No |
-| `POST` | `/api/auth/register` | Register new user account with automatic RSA key & X.509 cert provisioning | No | Yes |
-| `POST` | `/api/auth/login` | Authenticate with email and password (enforces 5-attempt lockout) | No | Yes |
-| `POST` | `/api/auth/logout` | Terminate session and audit logout event | Yes | Yes |
-| `GET` | `/api/auth/me` | Return currently authenticated user profile | Yes | No |
-| `GET` | `/api/auth/activity` | Return recent security audit logs for the authenticated user | Yes | No |
-| `GET` | `/api/users/directory` | Directory of active users with public key fingerprints and cert validity | Yes | No |
-| `GET` | `/api/users/<id>/certificate` | Return user X.509 certificate in PEM format with validation report | Yes | No |
-| `GET` | `/api/users/<id>/certificate/view` | Return parsed human-readable certificate details and PEM | Yes | No |
-| `GET` | `/api/admin/ca-info` | Return Root CA metadata and certificate statistics | Admin | No |
-| `GET` | `/api/admin/users` | List safe user account metadata for admin controls | Admin | No |
-| `GET` | `/api/admin/certificates` | List issued certificates; supports `status=active|revoked|expired` | Admin | No |
-| `POST` | `/api/admin/certificates/<serial>/revoke` | Revoke a user certificate by serial number | Admin | Yes |
-| `POST` | `/api/admin/users/<id>/toggle-active` | Set user account active state using `{"is_active": true|false}` | Admin | Yes |
-| `POST` | `/api/admin/users/<id>/certificates/reissue` | Reissue a certificate after admin password confirmation | Admin | Yes |
-| `GET` | `/api/admin/activity` | Search bounded audit events using `q` | Admin | No |
-| `GET` | `/api/admin/lab/files` | List safe metadata for local demo files (`DEMO_MODE=1`) | Admin | No |
-| `POST` | `/api/admin/lab/tamper-ciphertext` | Apply reversible local ciphertext tampering (`DEMO_MODE=1`) | Admin | Yes |
-| `POST` | `/api/admin/lab/tamper-metadata` | Apply reversible local metadata tampering (`DEMO_MODE=1`) | Admin | Yes |
-| `POST` | `/api/admin/lab/tamper-signature` | Apply reversible local signature tampering (`DEMO_MODE=1`) | Admin | Yes |
-| `POST` | `/api/admin/lab/swap-cert` | Substitute an untrusted demo certificate (`DEMO_MODE=1`) | Admin | Yes |
-| `POST` | `/api/admin/lab/restore` | Restore the original local encrypted package (`DEMO_MODE=1`) | Admin | Yes |
-| `POST` | `/api/files/upload` | Multipart upload with hybrid encryption (AES-GCM + OAEP + PSS) | Yes | Yes |
-| `GET` | `/api/files/sent` | List files sent by the current user (paginated, searchable) | Yes | No |
-| `GET` | `/api/files/received` | List files received by the current user with status badges | Yes | No |
-| `GET` | `/api/files/stats` | Return transfer statistics (sent count, received count) | Yes | No |
-| `GET` | `/api/files/<id>` | Return transfer metadata and ciphertext storage integrity status | Yes | No |
-| `GET` | `/api/files/<id>/verify` | Run full cryptographic verification pipeline and return `SecurityReport` | Yes | No |
-| `POST` | `/api/files/<id>/download` | Re-verify package, re-authenticate password, and stream decrypted plaintext | Yes | Yes |
+- **Hybrid Encryption Engine:** Combines the speed of AES-256-GCM for arbitrary-sized payloads with the asymmetric security of RSA-3072 for key encapsulation and digital signatures.
+- **Built-in Mini PKI:** A self-signed RSA-4096 Root CA generates and manages one-year X.509 certificates for users, tracking serial numbers, subject identities, validity periods, and real-time database revocation states.
+- **Fail-Closed Security Verification:** The receiver pipeline executes certificate chain validation, re-hashes the stored `.bin` payload to compare against the canonical JSON header, and checks the RSA-PSS signature. Any tampering causes immediate abort with safe, generic error reporting.
+- **Protected Private Keys at Rest:** User private keys are protected as encrypted PKCS#8 envelopes using HKDF-SHA256 derived keys from the application secret and bound to the user ID. Account password re-authentication is enforced during download to unlock the private key transiently in-memory.
+- **Memory-Buffered Processing:** Werkzeug's stream factory is overridden (`InMemoryUploadRequest`) to prevent multipart uploads from spooling to `/tmp`. Plaintext is encrypted before touching disk, and decrypted bytes stream directly from RAM.
+- **Interactive Security Status & Audit Terminal:** The frontend features a comprehensive security dashboard presenting 3 dedicated verification panels (Certificate, Signature, Integrity) alongside a live ASCII audit check box replicating terminal diagnostics.
+- **Interactive Attacker Simulation Lab (`DEMO_MODE=1`):** An administrative suite allows simulated attacks against local test packages—such as flipping ciphertext bits, altering metadata, corrupting signatures, or swapping rogue certificates—to demonstrate live detection and fail-closed prevention with one-click restore.
+- **Key Management System (KMS):** Advanced multi-tier key lifecycle management featuring versioned Key Encryption Keys (KEKs), automated rotation policies, compromise detection, and non-disruptive DEK rewrapping.
+- **Hardened Authentication:** Passwords hashed with salted `scrypt`, thread-safe brute-force lockout (5 attempts per email/IP triggers a 300-second lockout), timing-safe dummy verifications for nonexistent accounts, and CSRF token enforcement.
 
 ---
 
-## Project Structure
+## Cryptographic Design Principles (D1–D8)
 
-```text
-CipherLock/
-├── app.py                     # Flask application factory, error handlers, upload streamer
-├── config.py                  # Environment-backed configuration, paths, and security limits
-├── init_db.py                 # SQLite database initializer and additive schema migrations
-├── database/
-│   ├── db.py                  # Connection lifecycle, foreign key enforcement, migrations
-│   └── schema.sql             # Versioned relational schema (users, files, certificates, activity_log)
-├── crypto/
-│   ├── aes.py                 # AES-256-GCM encryption/decryption primitives
-│   ├── rsa.py                 # RSA-3072 keygen, PEM serialization, RSA-OAEP key wrapping
-│   ├── signatures.py          # RSA-PSS SHA-256 digital signatures and SHA-256 hex hashing
-│   ├── ca.py                  # Root CA generation, user certificate issuance, revocation
-│   ├── certificates.py        # X.509 certificate loading, chain validation, and CertReport
-│   ├── package.py             # Canonical JSON header, hybrid package creation, verify, open
-│   └── key_storage.py         # Protected user private-key envelope bound to user ID
-├── models/
-│   ├── user.py                # User CRUD, scrypt password hashing, timing-safe verification
-│   ├── file.py                # File metadata CRUD, status updates, package reconstruction
-│   ├── activity.py            # Security audit log management and throttled event logging
-│   ├── lockout.py             # Thread-safe in-memory brute-force lockout tracker
-│   ├── provisioning.py        # Transactional RSA keypair and certificate provisioning
-│   └── storage.py             # Safe UUID binary file storage with 0600 permissions
-├── routes/
-│   ├── __init__.py            # @login_required, @admin_required, current_user helpers
-│   ├── auth.py                # Authentication REST API (/api/auth)
-│   ├── files.py               # File sharing API (/api/files) and HTML web routes (/received, /verify)
-│   ├── users.py               # User directory and certificate inspection (/api/users)
-│   └── admin.py               # CA, account, audit, and DEMO_MODE-gated lab endpoints
-├── templates/                 # Jinja2 server-rendered views
-│   ├── base.html              # Base layout with navigation, CSRF injection, and scripts
-│   ├── index.html             # System overview landing page
-│   ├── dashboard.html         # User dashboard with transfer lists and audit log
-│   ├── received_files.html    # Received files inbox with verification badges
-│   ├── security_status.html   # 3-panel Security Status screen, ASCII check box, decrypt form
-│   ├── partials/
-│   │   └── status_badge.html  # Reusable status badge macro (pending, verified, failed)
-│   ├── 403.html               # 403 Forbidden error page
-│   ├── 404.html               # 404 Not Found error page
-│   └── 413.html               # 413 Payload Too Large error page
-├── static/
-│   ├── css/style.css          # Custom styling and design tokens
-│   └── js/app.js              # Password toggles, confirm dialogs, form spinners
-├── frontend/                  # React 18 + Vite + Tailwind CSS v3 SPA
-│   ├── src/api/client.js      # Axios instance with CSRF management and retry
-│   ├── src/components/        # Navbar, Footer, ProtectedRoute, StatusBadge, SecurityBox, SecurityPanel
-│   ├── src/pages/             # User workflows, SecurityStatus, and admin simulation/analysis screens
-│   └── package.json           # Frontend dependencies and Vite build scripts
-├── tests/                     # Automated pytest suite
-│   ├── test_app.py            # Phase 1 baseline tests (6 tests)
-│   ├── test_auth.py           # Phase 2 authentication & lockout tests (22 tests)
-│   ├── test_crypto.py         # Phase 3 AES-GCM & RSA tests (8 tests)
-│   ├── test_ca_certs.py       # Phase 4 CA & X.509 certificate tests (5 tests)
-│   ├── test_signatures.py     # Phase 5 RSA-PSS signature tests (7 tests)
-│   ├── test_wrap.py           # Phase 5 RSA-OAEP key wrapping tests (28 tests)
-│   ├── test_package.py        # Phase 6 hybrid package roundtrip & attack tests (8 tests)
-│   ├── test_files.py          # Phase 7 upload, storage, and participant scoping tests (78 tests)
-│   ├── test_flow.py           # Phase 8 end-to-end receiver verification & download tests
-│   └── test_attacks.py        # Phase 9 lab isolation, restore, admin, and audit tests
-└── scripts/
-    ├── check_env.py           # Environment and dependency diagnostic script
-    ├── init_ca.py             # Root CA bootstrap script
-    ├── create_admin.py        # Admin account creation script
-    ├── demo_wrap_sign.py      # Phase 5 RSA-OAEP and RSA-PSS CLI demo
-    ├── e2e_cli.py             # Standalone 9-attack cryptographic verification proof
-    ├── demo_tamper.py         # Local reversible tampering demonstrations
-    ├── demo_unauthorized.py   # Seven local authorization boundary checks
-    └── demo_revocation.py     # Local certificate revocation demonstration
+CipherLock strictly complies with eight foundational design rules:
+
+| Rule | Title | Cryptographic Specification |
+|:---:|:---|:---|
+| **D1** | **Hybrid Encryption** | **AES-256-GCM** encrypts file payloads. **RSA-OAEP** (SHA-256, MGF1-SHA-256) wraps the 32-byte AES key. **RSA-PSS** (SHA-256, salt length 32) signs the canonical header. RSA never directly encrypts files. |
+| **D2** | **Dedicated Key Pairs** | Each user possesses a single **RSA-3072** key pair. X.509 `KeyUsage` strictly enforces `digitalSignature` and `keyEncipherment`. |
+| **D3** | **Key Protection at Rest** | User private keys are stored exclusively as encrypted PKCS#8 envelopes using AES-256-GCM and HKDF-SHA256 bound to user ID. Private keys are never logged, stored in sessions/cookies, or transmitted to browsers. |
+| **D4** | **Mini Public Key Infrastructure** | A self-signed **RSA-4096** Root CA (10-year validity) issues 1-year X.509 end-entity certificates. Real-time revocation is enforced at the database level. |
+| **D5** | **Fresh Session Keys & Nonces** | Every upload generates a cryptographically random 32-byte AES key and 12-byte CSPRNG nonce (`os.urandom`). Stored format: `ciphertext \|\| 16-byte GCM tag`. Canonical header is authenticated as AAD. |
+| **D6** | **Canonical Signed Header** | Deterministic UTF-8 JSON with sorted keys and no whitespace: `{"ciphertext_sha256_hex":..., "nonce_b64":..., "original_filename":..., "receiver_id":..., "sender_cert_serial":..., "sender_id":..., "version":1, "wrapped_key_b64":...}`. Ciphertext hash is **recomputed from disk bytes**, never trusted from database fields. |
+| **D7** | **Fail-Closed Verification** | Recipient pipeline enforces: Authorization $\rightarrow$ X.509 Validity & Revocation $\rightarrow$ Recomputed SHA-256 Integrity $\rightarrow$ RSA-PSS Signature $\rightarrow$ RSA-OAEP Unwrap $\rightarrow$ AES-GCM Decrypt. Any failure halts execution and forbids decryption. |
+| **D8** | **Storage & Memory Discipline** | Max 25 MB file size. Plaintext **never touches server disk or temporary files**. Ciphertext is stored as `<uuid4>.bin` with restrictive permissions (`0600`). Decrypted plaintext is streamed in-memory with `Cache-Control: no-store`. |
+
+---
+
+## System Architecture
+
+### System Overview
+
+```mermaid
+flowchart LR
+    subgraph Client["Frontend Client (React 18 + Vite)"]
+        UI[Pages & Views:<br/>Dashboard · Send · Received<br/>Security Status · Directory · Admin Lab]
+        API[API Client<br/>Axios + CSRF Token + Credentials]
+        UI --> API
+    end
+
+    subgraph Backend["Flask REST API Engine"]
+        Routes[Blueprints / Routes<br/>/api/auth · /api/files · /api/users<br/>/api/admin · /api/kms]
+        Models[Models & Logic<br/>user · file · activity · provisioning · storage]
+        
+        subgraph CryptoCore["Crypto Engine (PyCA Cryptography)"]
+            AES[aes.py<br/>AES-256-GCM]
+            RSA[rsa.py<br/>RSA-3072 · OAEP Wrap]
+            SIG[signatures.py<br/>RSA-PSS Signatures]
+            PKG[package.py<br/>Canonical Header · Build · Verify · Open]
+        end
+
+        subgraph PKISub["Mini PKI"]
+            CA[ca.py<br/>Root CA · Issuance · Revocation]
+            CERT[certificates.py<br/>X.509 Verification & CertReport]
+        end
+
+        Routes --> Models
+        Routes --> PKG
+        PKG --> AES
+        PKG --> RSA
+        PKG --> SIG
+        PKG --> CERT
+        CERT --> CA
+    end
+
+    subgraph StorageLayer["Persistent Storage"]
+        DB[(SQLite Database<br/>users · files · certificates<br/>activity_log · kms tables)]
+        FS[/storage/encrypted/*.bin<br/>Ciphertext + GCM Tag/]
+        CAKey[/keys/ca/ca_key.pem<br/>Encrypted Root CA Key/]
+    end
+
+    API <-->|"HTTPS / JSON<br/>Session Cookie + X-CSRFToken"| Routes
+    Models --> DB
+    Routes --> FS
+    CA --> CAKey
+```
+
+### Sender Upload Pipeline
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Sender as Sender (Browser SPA)
+    participant Flask as Flask API Server
+    participant Crypto as Cryptographic Engine
+    participant Storage as Storage & SQLite DB
+
+    Sender->>Flask: POST /api/files/upload (file, recipient_id)
+    Flask->>Flask: Authenticate session, enforce size cap (≤ 25 MB), sanitize filename
+    Flask->>Crypto: Verify recipient's active X.509 certificate
+    Crypto-->>Flask: Certificate valid & key certified
+    Flask->>Crypto: build_package(plaintext, sender_keys, recipient_pubkey)
+    Note over Crypto: 1. Generate 256-bit AES key & 96-bit nonce<br/>2. AES-256-GCM encrypt payload (AAD = header)<br/>3. Recompute SHA-256(ciphertext)<br/>4. Wrap AES key with recipient RSA-OAEP public key<br/>5. Form canonical JSON header<br/>6. Sign canonical header with sender RSA-PSS private key
+    Crypto-->>Flask: Complete cryptographic package
+    Flask->>Storage: Atomically write storage/encrypted/<uuid4>.bin (0600)
+    Flask->>Storage: Insert metadata into SQLite & append audit log
+    Flask-->>Sender: 201 Created (Transfer summary & SHA-256 digest)
+```
+
+### Receiver Verification & Decryption Pipeline
+
+```mermaid
+flowchart TD
+    Start([Receiver Requests Verify / Download]) --> CheckAuth{Is Authenticated<br/>Recipient?}
+    CheckAuth -- No --> Deny404[HTTP 404 Not Found<br/>Fail Closed]
+    CheckAuth -- Yes --> ReadStorage[Read ciphertext file from storage/encrypted/<uuid4>.bin]
+    ReadStorage --> CertCheck{X.509 Cert Valid?<br/>CA Signature · Validity Dates<br/>Revocation State · Email Match}
+    CertCheck -- Invalid --> Refuse[FAIL: Display Security Error<br/>Abort Decryption Immediately]
+    CertCheck -- Valid --> Rehash[Recompute SHA-256 Hash of Stored Ciphertext]
+    Rehash --> CompareHash{Recomputed Hash ==<br/>Signed Header Hash?}
+    CompareHash -- Mismatch --> Refuse
+    CompareHash -- Match --> SigCheck{Verify RSA-PSS Signature<br/>over Canonical Header}
+    SigCheck -- Invalid --> Refuse
+    SigCheck -- Valid --> Trusted[STATUS: TRUSTED<br/>All 3 Security Pillars Passed]
+    Trusted --> PasswordCheck{Re-authenticate<br/>Receiver Password?}
+    PasswordCheck -- Failed --> PassError[HTTP 401 Unauthorized]
+    PasswordCheck -- Success --> KeyUnwrap[Unwrap AES Session Key with Receiver RSA Private Key]
+    KeyUnwrap --> AESDecrypt[AES-256-GCM In-Memory Decryption & Auth Tag Verify]
+    AESDecrypt --> StreamMemory[Stream Decrypted Plaintext from RAM<br/>Cache-Control: no-store]
+```
+
+### Key Management Hierarchy (KMS)
+
+```mermaid
+graph TB
+    subgraph KeyHierarchy["CipherLock Key Hierarchy"]
+        MK["Master Key<br/>(Derived from SECRET_KEY + KMS Salt via HKDF)"]
+        KEK["Key Encryption Keys (KEK)<br/>(Versioned KEK v1, v2, v3... AES-256-GCM Encrypted in DB)"]
+        DEK["Data Encryption Keys (DEK)<br/>(Per-file symmetric keys wrapped by active KEK)"]
+        DATA["Encrypted File Payload<br/>(storage/encrypted/<uuid4>.bin)"]
+    end
+    MK -->|"protects at rest"| KEK
+    KEK -->|"wraps / unwrap"| DEK
+    DEK -->|"AES-256-GCM"| DATA
 ```
 
 ---
 
-## Setup and Running
+## Technology Stack
 
-### 1. Environment Configuration
+| Layer | Component | Version / Library | Purpose |
+|:---|:---|:---|:---|
+| **Frontend Framework** | React | `18.3.1` | Single-page reactive user interface |
+| **Frontend Tooling** | Vite | `5.4.11` | Build pipeline and development proxy server |
+| **Styling & CSS** | Tailwind CSS | `3.4.15` | Modern design system, responsive layouts, micro-animations |
+| **Icons & Notifications** | Lucide React / Hot Toast | `lucide-react`, `react-hot-toast` | UI icons and asynchronous toast notifications |
+| **HTTP Client** | Axios | `1.7.9` | Asynchronous REST requests with automated CSRF injection |
+| **Backend Framework** | Flask | `3.1.3` | Lightweight REST API server and error routing |
+| **Cryptography** | PyCA Cryptography | `46.0.3` | Production-grade primitives (AES-GCM, RSA-OAEP, RSA-PSS, X.509) |
+| **CSRF Defense** | Flask-WTF | `1.2.2` | Synchronizer token pattern across all mutating endpoints |
+| **Password Hashing** | Werkzeug | `3.1.3` | Salted `scrypt` hashing and timing-safe verification |
+| **Database** | SQLite 3 | Standard Library | Parameterized SQL storage with additive migrations |
+| **Configuration** | Python-Dotenv | `1.0.1` | Environment variable management (`.env`) |
+| **Testing** | Pytest | `8.4.2` | Unit, integration, and security test execution |
 
-Copy the sample environment file and configure required keys:
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+- **Python:** Version `3.11` or higher (`python --version`)
+- **Node.js:** Version `18.0` or higher (`node --version`)
+- **Package Manager:** `npm` (`npm --version`)
+
+---
+
+### Quick Start (One-Command Setup)
+
+CipherLock provides an automated setup script that creates `.env`, generates cryptographically strong passphrases, creates the database tables, and initializes the Root CA:
 
 ```powershell
+# 1. Install backend dependencies
+pip install -r requirements.txt
+
+# 2. Run automated developer setup
+python scripts/setup_dev.py
+```
+
+To clean and reset the local database, CA, and stored files at any time:
+```powershell
+python scripts/setup_dev.py --reset
+```
+
+---
+
+### Manual Setup (Step-by-Step)
+
+#### 1. Configure Environment Variables
+Copy `.env.example` to `.env`:
+
+```powershell
+# Windows PowerShell
 Copy-Item .env.example .env
+
+# Linux / macOS
+cp .env.example .env
 ```
 
 Ensure `.env` contains:
-- `SECRET_KEY`: $\ge 32$ random characters (protects user private key envelopes at rest; must remain stable across restarts).
-- `CIPHERLOCK_CA_PASSPHRASE`: $\ge 16$ characters (encrypts the Root CA private key).
-- `DEMO_MODE`: defaults to `0`; set to `1` only for a disposable local demonstration environment. Never enable the attack lab in production.
+```ini
+# Flask secret key (>= 32 chars; protects private key envelopes at rest)
+SECRET_KEY=461fd176af921a15738be1efe29ab9a115732eaa9ab80ef3202e69a63bb749d2
 
-### 2. Backend Setup & Database Initialization
+# Root CA key passphrase (>= 16 chars; unlocks keys/ca/ca_key.pem)
+CIPHERLOCK_CA_PASSPHRASE=YourSecureCAPassphraseHere123!
+
+# Demo Mode (1 = enable attack lab & simulation endpoints, 0 = production safe)
+DEMO_MODE=1
+
+# Session security
+SESSION_COOKIE_SECURE=0
+FRONTEND_URL=http://localhost:5173
+```
+
+#### 2. Backend Setup
 
 ```powershell
-# Create and activate virtual environment
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+# Create and activate Python virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1   # On Linux/macOS: source .venv/bin/activate
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run environment sanity check
+# Verify environment configuration
 python scripts/check_env.py
 
 # Initialize database schema and migrations
@@ -285,74 +272,220 @@ python init_db.py
 # Bootstrap the Root Certificate Authority
 python scripts/init_ca.py
 
-# (Optional) Create an admin user account
+# Create an administrator account
 python scripts/create_admin.py
-
-# Start Flask backend server (http://127.0.0.1:5000)
-python app.py
 ```
 
-### 3. Frontend SPA Setup (React + Vite)
-
-In a separate terminal:
+#### 3. Frontend Setup
 
 ```powershell
 cd frontend
 npm install
-npm run dev
+npm run build    # Verify production build compilation
+cd ..
 ```
 
-The React frontend development server will launch at `http://localhost:5173/`, proxying `/api` requests to Flask at `:5000`.
+---
 
-To build the production frontend bundle:
+## Running the Application
 
+CipherLock runs with the Flask JSON API backend and the React Vite SPA concurrently:
+
+### Terminal 1: Backend Server (Flask API)
+```powershell
+python run.py
+# Running on http://127.0.0.1:5000 (Health endpoint: http://127.0.0.1:5000/health)
+```
+
+### Terminal 2: Frontend Client (Vite Dev Server)
 ```powershell
 cd frontend
-npm run build
+npm run dev
+# Running on http://localhost:5173 (Proxies /api requests to port 5000)
 ```
+
+Visit **[http://localhost:5173](http://localhost:5173)** in your browser.
+
+> **Testing Tip:** Open a normal browser window to log in as sender (e.g. `siddharth@example.com`) and an incognito/private window to log in as receiver (e.g. `vidhi@example.com`).
 
 ---
 
 ## Testing & Verification
 
-CipherLock includes an exhaustive automated test suite and cryptographic attack verification scripts:
-
-### Run the Complete Automated Test Suite
+### Running Pytest Suite
+Execute the full test suite covering all security, crypto, auth, storage, and KMS modules:
 
 ```powershell
 python -m pytest -v
 ```
 
-The suite includes the Phase 9 cases in `tests/test_attacks.py`.
+*Expected Result:* **213 passed, 2 skipped** (Windows POSIX permissions and symlink tests skipped appropriately on Windows).
 
-### Run Phase 8 End-to-End Receiver Flow Tests
-
-```powershell
-python -m pytest tests/test_flow.py -v
-```
-
-Tests verify:
-1. Complete happy path: Alice sends to Bob $\rightarrow$ Bob verifies (all checks pass, `files.status='verified'`) $\rightarrow$ Bob enters password $\rightarrow$ downloads exact plaintext (SHA-256 matches original byte-for-byte; asserts `Cache-Control: no-store`).
-2. Unauthorized user Charlie receives HTTP 404 on both verify and download attempts.
-3. Incorrect password blocks download with HTTP 401 error.
-4. Tampered ciphertext (1 flipped byte) causes verification failure and blocks download with exact message: *"Signature verification failed. File may have been modified or sender authenticity could not be established."*
-5. Sender cannot download their own file (HTTP 404).
-6. Revoked sender certificate causes verification failure and blocks download.
-
-### Run Cryptographic Package Attack Suite (9 Scenarios)
+### Running E2E CLI Attack Suite
+Validate the complete hybrid package engine against 9 attack vectors without requiring the web UI:
 
 ```powershell
 python scripts/e2e_cli.py
 ```
 
-*Expected output:* **PASS — 9/9 attack cases matched** (tampered ciphertext, altered filename, altered recipient ID, forged signature, rogue CA cert, expired cert, revoked cert, wrong recipient private key, attacker without private key).
+*Expected Output:*
+```text
+--------------------------------
+CIPHERLOCK SECURITY CHECK
+--------------------------------
+Certificate: VALID
+Signature: VALID
+Integrity: PASSED
+Status: TRUSTED
+--------------------------------
+Attack-case results:
+1. Ciphertext byte flip         POSSIBLE TAMPERING [PASS]
+2. Filename changed             POSSIBLE TAMPERING [PASS]
+3. Receiver ID changed          POSSIBLE TAMPERING [PASS]
+4. Signature from another user  POSSIBLE TAMPERING [PASS]
+5. Rogue CA certificate         UNTRUSTED SENDER   [PASS]
+6. Expired sender certificate   UNTRUSTED SENDER   [PASS]
+7. Revoked sender certificate   UNTRUSTED SENDER   [PASS]
+8. Wrong recipient key          UNWRAP REJECTED    [PASS]
+9. Attacker without private key NO PRIVATE KEY     [PASS]
 
-### Run Phase 9 Local Demonstrations
-
-```powershell
-python scripts/demo_tamper.py
-python scripts/demo_unauthorized.py
-python scripts/demo_revocation.py
+Result: PASS — 9/9 attack cases matched.
 ```
 
-Each script creates a disposable app and temporary CA/database/storage. The demo scripts do not use local application records. Set `DEMO_MODE=1` only in a local demo setup to enable the interactive admin lab; the default remains `0`.
+### Interactive CLI Attack Demonstrations
+Verify security boundaries with isolated local demonstration scripts:
+
+```powershell
+# 1. Reversible local ciphertext, metadata, and signature tampering
+python scripts/demo_tamper.py
+
+# 2. Authorization boundary and privilege separation tests (7 cases)
+python scripts/demo_unauthorized.py
+
+# 3. Dynamic certificate revocation and verification change tests
+python scripts/demo_revocation.py
+
+# 4. RSA-OAEP session-key wrapping and RSA-PSS signature randomization
+python scripts/demo_wrap_sign.py
+```
+
+---
+
+## Project Structure
+
+```text
+CipherLock/
+├── app.py                     # Flask application factory, CSRF, error handlers, memory streamer
+├── config.py                  # Central configuration, file size limits, environment loader
+├── init_db.py                 # SQLite database initialization & migrations
+├── run.py                     # Local development entrypoint
+├── requirements.txt           # Python backend dependencies
+├── .env.example               # Environment variables template
+├── .gitignore                 # Secrets, keys, certificates, binaries, and build artifacts
+│
+├── crypto/                    # Cryptographic Primitives & Engines (PyCA)
+│   ├── aes.py                 # AES-256-GCM authenticated encryption/decryption
+│   ├── rsa.py                 # RSA-3072 keygen, PEM serialization, RSA-OAEP wrapping
+│   ├── signatures.py          # RSA-PSS digital signatures (SHA-256, 32-byte salt)
+│   ├── ca.py                  # Self-signed RSA-4096 Root CA, user cert issuance, revocation
+│   ├── certificates.py        # X.509 certificate validation and CertReport generation
+│   ├── package.py             # Canonical header, hybrid package builder, verify, open
+│   ├── key_storage.py         # Encrypted private key envelopes bound to user ID
+│   └── kms.py                 # KMS envelope encryption and key rotation logic
+│
+├── models/                    # Data Access & Domain Logic
+│   ├── user.py                # User CRUD, scrypt password hashing, timing-safe lookup
+│   ├── file.py                # File metadata records, status transitions, package reconstruction
+│   ├── activity.py            # Security audit logging with throttling
+│   ├── lockout.py             # In-memory IP/email brute-force lockout manager
+│   ├── provisioning.py        # Transactional user keypair and X.509 cert provisioning
+│   ├── storage.py             # Restrictive UUID ciphertext storage (0600)
+│   └── kms.py                 # KMS service, KEK versioning, rotation policies, and rewrap
+│
+├── routes/                    # API Endpoints & Route Handlers
+│   ├── __init__.py            # Authentication & admin decorators (@login_required, @admin_required)
+│   ├── auth.py                # Account registration, login, logout, me, activity
+│   ├── files.py               # File upload, listings, verification, and streaming download
+│   ├── users.py               # Certificate trust directory and certificate viewer
+│   ├── admin.py               # CA statistics, certificate management, Attack Lab endpoints
+│   └── kms.py                 # KMS status, rotation, compromise, recovery, and rewrapping
+│
+├── database/                  # Relational Storage (SQLite)
+│   ├── db.py                  # Database connection helpers and table migration runner
+│   ├── schema.sql             # Relational schema (users, files, certificates, activity_log)
+│   └── schema_kms.sql         # KMS schema (kek_versions, dek_registry, kms_audit_log, policies)
+│
+├── frontend/                  # React 18 + Vite + Tailwind CSS Single-Page Application
+│   ├── package.json           # Frontend dependencies and npm scripts
+│   ├── vite.config.js         # Vite configuration and backend API proxy (/api -> :5000)
+│   ├── tailwind.config.js     # Tailwind CSS theme, colors (navy, lime, paper), shadows
+│   ├── src/
+│   │   ├── main.jsx           # React application mounting
+│   │   ├── App.jsx            # React Router routing table & route guards
+│   │   ├── index.css          # Design system styles, surfaces, buttons, and animations
+│   │   ├── api/client.js      # Axios instance with CSRF header extraction and retry
+│   │   ├── context/           # AuthContext managing user session state
+│   │   ├── components/        # Reusable UI components (Navbar, SecurityPanel, SecurityBox)
+│   │   └── pages/             # Application views (Dashboard, Send, Received, SecurityStatus)
+│
+├── templates/                 # Server-rendered Jinja2 templates (Landing, KMS Dashboard)
+├── static/                    # Static assets (CSS, JS)
+├── scripts/                   # Utility & Verification Scripts
+│   ├── setup_dev.py           # Automated developer environment bootstrapper
+│   ├── check_env.py           # Environment sanity and version validator
+│   ├── init_ca.py             # Root CA manual initializer
+│   ├── create_admin.py        # Administrative account generator
+│   ├── e2e_cli.py             # 9-scenario cryptographic attack test runner
+│   ├── demo_tamper.py         # Reversible ciphertext/metadata tampering demonstration
+│   ├── demo_unauthorized.py   # Authorization boundary checks
+│   ├── demo_revocation.py     # Certificate revocation demonstration
+│   └── demo_wrap_sign.py      # RSA-OAEP and RSA-PSS primitive demonstration
+│
+└── tests/                     # Automated Pytest Suite (213 tests)
+    ├── test_app.py            # App factory and health check tests
+    ├── test_auth.py           # Authentication, scrypt, and lockout tests
+    ├── test_crypto.py         # AES-GCM and RSA primitive tests
+    ├── test_ca_certs.py       # Root CA and X.509 certificate validation tests
+    ├── test_wrap.py           # RSA-OAEP key wrapping unit tests
+    ├── test_signatures.py     # RSA-PSS digital signature unit tests
+    ├── test_package.py        # Hybrid package engine and attack scenario tests
+    ├── test_files.py          # Upload, memory streaming, and storage tests
+    ├── test_flow.py           # End-to-end receiver verification and download tests
+    ├── test_attacks.py        # Attack simulation lab and restore tests
+    └── test_kms.py            # KMS key hierarchy and rotation tests
+```
+
+---
+
+## API Reference
+
+### Core JSON REST Endpoints
+
+| Method | Endpoint | Description | Access Level | CSRF Protected |
+|:---|:---|:---|:---:|:---:|
+| `GET` | `/health` | Application health status (`{"status": "ok"}`) | Public | No |
+| `GET` | `/api/csrf-token` | Fetch synchronizer CSRF token (`Cache-Control: no-store`) | Public | No |
+| `POST` | `/api/auth/register` | Register user account with automatic RSA key & X.509 cert | Public | Yes |
+| `POST` | `/api/auth/login` | Authenticate user session (enforces 5-attempt lockout) | Public | Yes |
+| `POST` | `/api/auth/logout` | Terminate active user session and audit event | Authenticated | Yes |
+| `GET` | `/api/auth/me` | Fetch active user profile and role | Authenticated | No |
+| `GET` | `/api/users/directory` | Directory of active users with public keys and cert validity | Authenticated | No |
+| `GET` | `/api/users/<id>/certificate` | Return public X.509 certificate in PEM format | Authenticated | No |
+| `POST` | `/api/files/upload` | Multipart upload with hybrid encryption (AES-GCM + OAEP + PSS) | Authenticated | Yes |
+| `GET` | `/api/files/sent` | List transfers sent by the current user (paginated) | Authenticated | No |
+| `GET` | `/api/files/received` | List transfers received by current user with status | Authenticated | No |
+| `GET` | `/api/files/<id>/verify` | Execute cryptographic verification pipeline; return `SecurityReport` | Recipient Only | No |
+| `POST` | `/api/files/<id>/download` | Re-verify package, unlock private key with password, stream plaintext | Recipient Only | Yes |
+| `GET` | `/api/admin/ca-info` | Fetch Root CA metadata and active/revoked statistics | Admin Only | No |
+| `POST` | `/api/admin/certificates/<serial>/revoke` | Revoke a user certificate by serial number | Admin Only | Yes |
+| `POST` | `/api/admin/lab/tamper-ciphertext` | Flip 1 byte of stored ciphertext (`DEMO_MODE=1` only) | Admin Only | Yes |
+| `POST` | `/api/admin/lab/restore` | Restore original package from backup (`DEMO_MODE=1` only) | Admin Only | Yes |
+| `GET` | `/api/kms/status` | Current KMS key hierarchy status and active KEK info | Authenticated | No |
+| `POST` | `/api/kms/rotate` | Trigger manual KEK rotation and transition | Admin Only | Yes |
+| `POST` | `/api/kms/rewrap` | Mass rewrap all DEKs under latest active KEK | Admin Only | Yes |
+
+---
+
+## License
+
+Academic and educational project developed for the **Cryptography and Network Security** curriculum at Sardar Patel Institute of Technology (SPIT), Mumbai.

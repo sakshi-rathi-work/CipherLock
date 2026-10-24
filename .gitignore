@@ -39,9 +39,12 @@ frontend/.vite/
 
 alice.jar
 bob.jar
-.env
-.venv/
-__pycache__/
-
 alice.tok
 bob.tok
+
+# Ignore all markdown files except CipherLock.md and README.md
+*.md
+**/*.md
+!/README.md
+!/CipherLock.md
+
