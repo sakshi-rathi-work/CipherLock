@@ -30,6 +30,10 @@ VALID_ACTIONS = {
     "file_download",
     "file_download_failed",
     "file_download_rejected",
+    "admin_certificate_revoke",
+    "admin_certificate_reissue",
+    "admin_user_status",
+    "SIMULATED ATTACK",
 }
 
 

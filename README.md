@@ -8,10 +8,9 @@ The system is developed across 10 sequential, disciplined phases.
 
 ## Current Status
 
-- **Completed Phases:** Phase 1 through Phase 8 (`COMPLETE`)
-- **Current Milestone:** **Phase 8 — Receiver workflow, security status, and in-memory decryption**
-- **Next Milestone:** **Phase 9 — Attack demonstrations and admin completion**
-- **Test Suite Status:** **158 passed**, 2 skipped (Windows-specific symlink/permission tests), 0 failed
+- **Completed Phases:** Phase 1 through Phase 9 (Phase 9 implementation available on its feature branch)
+- **Current Milestone:** **Phase 9 — Attack demonstrations and admin completion**
+- **Validation:** Run the commands in [Testing & Verification](#testing--verification) on your machine before merging.
 - **CLI Attack Suite:** **9/9 attack cases PASS** (`python scripts/e2e_cli.py`)
 - **Frontend SPA Build:** **Clean build** via Vite (`npm run build`)
 
@@ -29,7 +28,7 @@ The system is developed across 10 sequential, disciplined phases.
 | **6** | Hybrid Cryptographic Package | Canonical JSON header, tamper detection, fail-closed `open_package`, 9 attack CLI proofs | `COMPLETE` |
 | **7** | File Storage & Sharing API | In-memory upload stream, random UUID storage, participant-scoped listings, file stats | `COMPLETE` |
 | **8** | Receiver Verification & Decryption | 3-panel Security Status UI, monospace audit terminal box, password re-authenticated in-memory download | `COMPLETE` |
-| **9** | Attack Demonstrations & Admin | Attacker Simulation Lab (`DEMO_MODE=1`), Stolen Data math proof, CLI attack scripts, admin tools | Planned |
+| **9** | Attack Demonstrations & Admin | Admin-only local attack lab, Stolen Data analysis, CLI attack scripts, account and certificate controls | Implemented |
 | **10** | Production Hardening & Viva | Security headers, CSP, secret audit script, single-origin serving, report, Viva Q&A | Planned |
 
 ---
@@ -119,7 +118,15 @@ CipherLock strictly complies with eight foundational cryptographic principles:
   - Fail-closed enforcement: On any failure, returns:
     `"Signature verification failed. File may have been modified or sender authenticity could not be established."`
 
----
+  ### Phase 9 — Attack Demonstrations & Admin Completion
+  - The Attacker Simulation Lab is available only to administrators when `DEMO_MODE=1`; all lab endpoints return 404 otherwise. It can tamper with ciphertext, signed metadata, signatures, or sender certificates and restore the original package.
+  - Demo backups and audit entries are scoped to locally stored files. Every lab operation is logged as `SIMULATED ATTACK`; a recipient must independently verify the result, and tampered packages remain blocked from download.
+  - Admin tools include user enable/disable controls (with self/last-admin safeguards), active/revoked/expired certificate filters, password-confirmed certificate reissue, and a searchable audit log.
+  - The Stolen Data Analysis screen explains the AES-256 keyspace and illustrates why unrelated private keys, random keys, and sender public keys cannot decrypt the receiver's package. It is an explanation only and does not attempt to decrypt real files.
+  - `scripts/demo_tamper.py`, `scripts/demo_unauthorized.py`, and `scripts/demo_revocation.py` create disposable local apps and temporary cryptographic material; they do not use the configured database, CA, or stored files.
+  - Keep `DEMO_MODE=0` outside a disposable local demonstration environment.
+
+  ---
 
 ## Route & API Reference
 
@@ -148,8 +155,18 @@ CipherLock strictly complies with eight foundational cryptographic principles:
 | `GET` | `/api/users/<id>/certificate` | Return user X.509 certificate in PEM format with validation report | Yes | No |
 | `GET` | `/api/users/<id>/certificate/view` | Return parsed human-readable certificate details and PEM | Yes | No |
 | `GET` | `/api/admin/ca-info` | Return Root CA metadata and certificate statistics | Admin | No |
-| `GET` | `/api/admin/certificates` | List all issued certificates with status filters | Admin | No |
+| `GET` | `/api/admin/users` | List safe user account metadata for admin controls | Admin | No |
+| `GET` | `/api/admin/certificates` | List issued certificates; supports `status=active|revoked|expired` | Admin | No |
 | `POST` | `/api/admin/certificates/<serial>/revoke` | Revoke a user certificate by serial number | Admin | Yes |
+| `POST` | `/api/admin/users/<id>/toggle-active` | Set user account active state using `{"is_active": true|false}` | Admin | Yes |
+| `POST` | `/api/admin/users/<id>/certificates/reissue` | Reissue a certificate after admin password confirmation | Admin | Yes |
+| `GET` | `/api/admin/activity` | Search bounded audit events using `q` | Admin | No |
+| `GET` | `/api/admin/lab/files` | List safe metadata for local demo files (`DEMO_MODE=1`) | Admin | No |
+| `POST` | `/api/admin/lab/tamper-ciphertext` | Apply reversible local ciphertext tampering (`DEMO_MODE=1`) | Admin | Yes |
+| `POST` | `/api/admin/lab/tamper-metadata` | Apply reversible local metadata tampering (`DEMO_MODE=1`) | Admin | Yes |
+| `POST` | `/api/admin/lab/tamper-signature` | Apply reversible local signature tampering (`DEMO_MODE=1`) | Admin | Yes |
+| `POST` | `/api/admin/lab/swap-cert` | Substitute an untrusted demo certificate (`DEMO_MODE=1`) | Admin | Yes |
+| `POST` | `/api/admin/lab/restore` | Restore the original local encrypted package (`DEMO_MODE=1`) | Admin | Yes |
 | `POST` | `/api/files/upload` | Multipart upload with hybrid encryption (AES-GCM + OAEP + PSS) | Yes | Yes |
 | `GET` | `/api/files/sent` | List files sent by the current user (paginated, searchable) | Yes | No |
 | `GET` | `/api/files/received` | List files received by the current user with status badges | Yes | No |
@@ -190,7 +207,7 @@ CipherLock/
 │   ├── auth.py                # Authentication REST API (/api/auth)
 │   ├── files.py               # File sharing API (/api/files) and HTML web routes (/received, /verify)
 │   ├── users.py               # User directory and certificate inspection (/api/users)
-│   └── admin.py               # Root CA management and certificate revocation (/api/admin)
+│   └── admin.py               # CA, account, audit, and DEMO_MODE-gated lab endpoints
 ├── templates/                 # Jinja2 server-rendered views
 │   ├── base.html              # Base layout with navigation, CSRF injection, and scripts
 │   ├── index.html             # System overview landing page
@@ -208,10 +225,9 @@ CipherLock/
 ├── frontend/                  # React 18 + Vite + Tailwind CSS v3 SPA
 │   ├── src/api/client.js      # Axios instance with CSRF management and retry
 │   ├── src/components/        # Navbar, Footer, ProtectedRoute, StatusBadge, SecurityBox, SecurityPanel
-│   ├── src/pages/             # Register, Login, Dashboard, Directory, CertificateView, SendFile,
-│   │                          # SentFiles, ReceivedFiles, SecurityStatus
+│   ├── src/pages/             # User workflows, SecurityStatus, and admin simulation/analysis screens
 │   └── package.json           # Frontend dependencies and Vite build scripts
-├── tests/                     # Automated pytest suite (160 tests total)
+├── tests/                     # Automated pytest suite
 │   ├── test_app.py            # Phase 1 baseline tests (6 tests)
 │   ├── test_auth.py           # Phase 2 authentication & lockout tests (22 tests)
 │   ├── test_crypto.py         # Phase 3 AES-GCM & RSA tests (8 tests)
@@ -220,13 +236,17 @@ CipherLock/
 │   ├── test_wrap.py           # Phase 5 RSA-OAEP key wrapping tests (28 tests)
 │   ├── test_package.py        # Phase 6 hybrid package roundtrip & attack tests (8 tests)
 │   ├── test_files.py          # Phase 7 upload, storage, and participant scoping tests (78 tests)
-│   └── test_flow.py           # Phase 8 end-to-end receiver verification & download tests (6 tests)
+│   ├── test_flow.py           # Phase 8 end-to-end receiver verification & download tests
+│   └── test_attacks.py        # Phase 9 lab isolation, restore, admin, and audit tests
 └── scripts/
     ├── check_env.py           # Environment and dependency diagnostic script
     ├── init_ca.py             # Root CA bootstrap script
     ├── create_admin.py        # Admin account creation script
     ├── demo_wrap_sign.py      # Phase 5 RSA-OAEP and RSA-PSS CLI demo
-    └── e2e_cli.py             # Standalone 9-attack cryptographic verification proof
+    ├── e2e_cli.py             # Standalone 9-attack cryptographic verification proof
+    ├── demo_tamper.py         # Local reversible tampering demonstrations
+    ├── demo_unauthorized.py   # Seven local authorization boundary checks
+    └── demo_revocation.py     # Local certificate revocation demonstration
 ```
 
 ---
@@ -244,7 +264,7 @@ Copy-Item .env.example .env
 Ensure `.env` contains:
 - `SECRET_KEY`: $\ge 32$ random characters (protects user private key envelopes at rest; must remain stable across restarts).
 - `CIPHERLOCK_CA_PASSPHRASE`: $\ge 16$ characters (encrypts the Root CA private key).
-- `DEMO_MODE`: `1` (enables demonstration tools; set to `0` for production mode).
+- `DEMO_MODE`: defaults to `0`; set to `1` only for a disposable local demonstration environment. Never enable the attack lab in production.
 
 ### 2. Backend Setup & Database Initialization
 
@@ -303,7 +323,7 @@ CipherLock includes an exhaustive automated test suite and cryptographic attack 
 python -m pytest -v
 ```
 
-*Expected output:* **158 passed, 2 skipped** (Windows file permission tests skipped safely).
+The suite includes the Phase 9 cases in `tests/test_attacks.py`.
 
 ### Run Phase 8 End-to-End Receiver Flow Tests
 
@@ -326,3 +346,13 @@ python scripts/e2e_cli.py
 ```
 
 *Expected output:* **PASS — 9/9 attack cases matched** (tampered ciphertext, altered filename, altered recipient ID, forged signature, rogue CA cert, expired cert, revoked cert, wrong recipient private key, attacker without private key).
+
+### Run Phase 9 Local Demonstrations
+
+```powershell
+python scripts/demo_tamper.py
+python scripts/demo_unauthorized.py
+python scripts/demo_revocation.py
+```
+
+Each script creates a disposable app and temporary CA/database/storage. The demo scripts do not use local application records. Set `DEMO_MODE=1` only in a local demo setup to enable the interactive admin lab; the default remains `0`.

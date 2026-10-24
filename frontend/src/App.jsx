@@ -12,6 +12,8 @@ import NotFound from "./pages/NotFound";
 import Directory from "./pages/Directory";
 import CertificateView from "./pages/CertificateView";
 import AdminPanel from "./pages/admin/AdminPanel";
+import AttackLab from "./pages/admin/AttackLab";
+import StolenData from "./pages/admin/StolenData";
 import SendFile from "./pages/SendFile";
 import SentFiles from "./pages/SentFiles";
 import ReceivedFiles from "./pages/ReceivedFiles";
@@ -64,6 +66,8 @@ export default function App() {
               <Route path="/received" element={<ProtectedRoute><ReceivedFiles /></ProtectedRoute>} />
               <Route path="/received/:id" element={<ProtectedRoute><SecurityStatus /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+              <Route path="/admin/attack-lab" element={<ProtectedRoute admin><AttackLab /></ProtectedRoute>} />
+              <Route path="/admin/stolen-data" element={<ProtectedRoute admin><StolenData /></ProtectedRoute>} />
               <Route
                 path="/dashboard"
                 element={
